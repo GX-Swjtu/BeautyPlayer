@@ -179,6 +179,7 @@ ApplicationWindow {
             anchors.fill: parent; anchors.margins: root.compact ? 16 : 32; spacing: 12
             RowLayout {
                 Layout.fillWidth: true
+                Image { source: "qrc:/branding/mark.png"; Layout.preferredWidth: 46; Layout.preferredHeight: 46 }
                 ColumnLayout {
                     spacing: 4; Layout.fillWidth: true
                     Label { text: "映颜"; font.pixelSize: 30; font.bold: true; color: "#cff6e8" }
@@ -201,30 +202,60 @@ ApplicationWindow {
                 }
             }
             RowLayout {
-                Layout.fillWidth: true
-                Label { text: videoLibrary.folder || "最近更新"; elide: Text.ElideLeft; Layout.fillWidth: true; color: "#c4d3ce"; font.pixelSize: 13 }
-                ToolButton { text: videoLibrary.scanning ? "扫描中…" : "刷新"; enabled: !videoLibrary.scanning; implicitHeight: 44; onClicked: videoLibrary.refresh() }
+                Layout.fillWidth: true; spacing: 4
+                ComboBox {
+                    objectName: "librarySort"; Layout.fillWidth: true; implicitHeight: 44
+                    model: ["文件名", "创建时间", "文件大小"]
+                    currentIndex: ["name", "created", "size"].indexOf(videoLibrary.sortBy)
+                    onActivated: videoLibrary.sortBy = ["name", "created", "size"][currentIndex]
+                    Accessible.name: "视频排序"
+                }
+                ToolButton { objectName: "librarySortDirection"; text: videoLibrary.descending ? "降序" : "升序"; implicitWidth: 52; implicitHeight: 44; onClicked: videoLibrary.descending = !videoLibrary.descending }
+                ToolButton { objectName: "libraryLayoutToggle"; text: videoLibrary.twoColumns ? "双列" : "单列"; implicitWidth: 52; implicitHeight: 44; onClicked: videoLibrary.twoColumns = !videoLibrary.twoColumns }
+                ToolButton { text: videoLibrary.scanning ? "扫描中" : "刷新"; enabled: !videoLibrary.scanning; implicitWidth: 60; implicitHeight: 44; onClicked: videoLibrary.refresh() }
             }
-            ListView {
-                id: videoList; objectName: "videoList"; Layout.fillWidth: true; Layout.fillHeight: true; clip: true; spacing: 6
-                model: videoLibrary; reuseItems: true; boundsBehavior: Flickable.StopAtBounds
+            GridView {
+                id: videoList; objectName: "videoList"; Layout.fillWidth: true; Layout.fillHeight: true; clip: true
+                model: videoLibrary; boundsBehavior: Flickable.StopAtBounds; cacheBuffer: 0
+                cellWidth: width / (videoLibrary.twoColumns ? 2 : 1)
+                cellHeight: videoLibrary.twoColumns ? (cellWidth - 24) * 9 / 16 + 82 : 96
                 ScrollBar.vertical: ScrollBar { }
                 delegate: ItemDelegate {
+                    id: videoTile
                     required property string videoName
                     required property url mediaUrl
                     required property string folderPath
                     required property real sizeMB
-                    width: videoList.width; height: 82
-                    background: Rectangle { radius: 14; color: parent.down ? "#2c433b" : parent.hovered ? "#23332e" : "#1a2428" }
-                    contentItem: RowLayout {
-                        spacing: 14
-                        Rectangle { width: 52; height: 52; radius: 12; color: "#2b413a"; Label { anchors.centerIn: parent; text: "▶"; color: "#ade8d1"; font.pixelSize: 20 } }
-                        ColumnLayout {
-                            Layout.fillWidth: true; spacing: 6
-                            Label { text: videoName; Layout.fillWidth: true; elide: Text.ElideMiddle; color: "#e0ede8"; font.pixelSize: 15 }
-                            Label { text: sizeMB.toFixed(1) + " MB  ·  " + (root.android ? folderPath.split("/").pop() : folderPath); Layout.fillWidth: true; elide: Text.ElideLeft; font.pixelSize: 11; color: "#8fa69d" }
+                    required property string createdText
+                    required property string thumbnailUrl
+                    width: videoList.cellWidth - 6; height: videoList.cellHeight - 6; padding: 8
+                    background: Rectangle { radius: 12; color: parent.down ? "#2c433b" : parent.hovered ? "#23332e" : "#1a2428" }
+                    contentItem: Item {
+                        Rectangle {
+                            id: previewBox
+                            width: videoLibrary.twoColumns ? parent.width : 112
+                            height: videoLibrary.twoColumns ? width * 9 / 16 : 68
+                            y: videoLibrary.twoColumns ? 0 : (parent.height - height) / 2
+                            color: "#24352f"; radius: 6; clip: true
+                            Image {
+                                id: preview; objectName: "videoThumbnail"
+                                anchors.fill: parent; asynchronous: true; cache: true
+                                source: libraryPage.visible ? videoTile.thumbnailUrl : ""
+                                sourceSize: Qt.size(512, 512); fillMode: Image.PreserveAspectCrop
+                            }
+                            Image { anchors.centerIn: parent; width: 52; height: 52; source: "qrc:/branding/mark.png"; visible: preview.status !== Image.Ready; opacity: .7 }
+                            Label { anchors.bottom: parent.bottom; anchors.horizontalCenter: parent.horizontalCenter; bottomPadding: 2; text: "暂无预览"; font.pixelSize: 10; color: "#9ab3a6"; visible: preview.status === Image.Error }
+                        }
+                        Column {
+                            x: videoLibrary.twoColumns ? 0 : previewBox.width + 12
+                            y: videoLibrary.twoColumns ? previewBox.height + 8 : 9
+                            width: parent.width - x; spacing: 5
+                            Label { text: videoTile.videoName; width: parent.width; elide: Text.ElideMiddle; color: "#e0ede8"; font.pixelSize: 14 }
+                            Label { text: videoTile.sizeMB.toFixed(1) + " MB  ·  " + (videoLibrary.sortBy === "created" ? videoTile.createdText.split(" ")[0] : videoTile.folderPath.split("/").pop()); width: parent.width; elide: Text.ElideRight; font.pixelSize: 11; color: "#9aafa6" }
                         }
                     }
+                    Accessible.name: videoName
+                    ToolTip.visible: hovered; ToolTip.text: videoName + "\n" + createdText
                     onClicked: bridge.open(mediaUrl)
                 }
                 Column {
@@ -243,10 +274,27 @@ ApplicationWindow {
     }
     Menu {
         id: libraryMenu
-        MenuItem { text: root.android ? "授权 / 重新选择视频" : "添加文件夹"; onTriggered: root.android ? videoLibrary.requestAccess() : folderDialog.open() }
-        MenuItem { text: "管理扫描目录"; visible: !root.android; height: visible ? implicitHeight : 0; onTriggered: foldersDialog.open() }
+        MenuItem { text: "添加扫描文件夹"; onTriggered: root.android ? videoLibrary.chooseFolder() : folderDialog.open() }
+        MenuItem { text: "授权 / 重新选择视频"; visible: root.android; height: visible ? implicitHeight : 0; onTriggered: videoLibrary.requestAccess() }
+        MenuItem { text: "视频库设置"; onTriggered: libraryOptions.open() }
+        MenuItem { text: "管理扫描目录"; onTriggered: foldersDialog.open() }
         MenuItem { text: "播放网址"; onTriggered: urlDialog.open() }
         MenuItem { text: "播放设置"; onTriggered: optionsDialog.open() }
+    }
+    Dialog {
+        id: libraryOptions; title: "视频库设置"; anchors.centerIn: parent
+        width: Math.min(460, root.width - 24); modal: true
+        footer: DialogButtonBox { Button { text: "关闭"; DialogButtonBox.buttonRole: DialogButtonBox.RejectRole } onRejected: libraryOptions.close() }
+        ColumnLayout {
+            width: parent.width; spacing: 10
+            Switch { objectName: "respectNoMediaToggle"; text: "识别 .nomedia"; checked: videoLibrary.respectNoMedia; onToggled: videoLibrary.respectNoMedia = checked }
+            Label {
+                Layout.fillWidth: true; wrapMode: Text.Wrap; font.pixelSize: 12; color: "#abc0b6"
+                text: "开启时跳过含 .nomedia 的文件夹及子文件夹。" + (root.android ? "\n关闭后，需要先添加对应的扫描文件夹并授权，才能查看系统视频库隐藏的视频。" : "")
+            }
+            Button { text: "添加扫描文件夹"; Layout.fillWidth: true; onClicked: root.android ? videoLibrary.chooseFolder() : folderDialog.open() }
+            Label { text: "创建时间缺失时使用入库或修改时间。\n缩略图按需生成并缓存，30 天未使用自动清理；最多保留 256 MB。"; Layout.fillWidth: true; wrapMode: Text.Wrap; font.pixelSize: 12; color: "#8fa79b" }
+        }
     }
     Dialog {
         id: foldersDialog; title: "扫描目录"; anchors.centerIn: parent; width: Math.min(550, root.width - 24); modal: true; standardButtons: Dialog.Close
@@ -255,7 +303,7 @@ ApplicationWindow {
             delegate: RowLayout {
                 required property string modelData
                 width: ListView.view.width; height: 64
-                Label { text: modelData; Layout.fillWidth: true; elide: Text.ElideLeft; font.pixelSize: 12 }
+                Label { text: videoLibrary.rootLabel(modelData); Layout.fillWidth: true; elide: Text.ElideLeft; font.pixelSize: 12 }
                 Button { text: "移除"; flat: true; onClicked: videoLibrary.removeFolder(modelData) }
             }
         }

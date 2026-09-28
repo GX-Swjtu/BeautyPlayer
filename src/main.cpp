@@ -7,6 +7,10 @@
 #include <QCommandLineParser>
 #include <QQuickStyle>
 #include <QDir>
+#include <QIcon>
+#include <QStandardPaths>
+#include "ThumbnailProvider.h"
+#include "LibraryProbe.h"
 #include <QQuickWindow>
 #include "PlaybackProbe.h"
 #include "PlaybackSession.h"
@@ -34,7 +38,8 @@ int main(int argc, char **argv) {
     QGuiApplication app(argc, argv);
     QCoreApplication::setOrganizationName("BeautyPlayer");
     QCoreApplication::setApplicationName("BeautyPlayer");
-    QCoreApplication::setApplicationVersion("0.3.1");
+    QCoreApplication::setApplicationVersion("0.4.0");
+    QGuiApplication::setWindowIcon(QIcon(":/branding/mark.png"));
     QQuickStyle::setStyle("Material");
     QCommandLineParser parser; parser.addHelpOption(); parser.addVersionOption();
     parser.addPositionalArgument("video", "Local video or HTTP(S) URL");
@@ -49,6 +54,9 @@ int main(int argc, char **argv) {
     parser.addOption({"self-test", "Run ARM64 color/NEON/GLES checks and save JSON", "report-prefix"});
 #endif
     parser.addOption({"library-folder", "Add a folder to the video library", "folder"});
+    parser.addOption({"library-search", "Initial video library search", "text"});
+    parser.addOption({"library-probe", "Validate library thumbnails and layouts", "report-prefix"});
+    parser.addOption({"thumbnail-cache", "Override thumbnail cache for isolated diagnostics", "directory"});
     parser.addOption({"converter", "Frame conversion: auto (AVX2/NEON), sse, neon, scalar, qt", "mode", "auto"});
     parser.process(app);
     if (!configureFrameConversion(parser.value("converter"))) parser.showHelp(2);
@@ -65,13 +73,17 @@ int main(int argc, char **argv) {
     });
 #endif
     QMediaPlayer player; QAudioOutput audio; audio.setVolume(.65f); player.setAudioOutput(&audio);
-    BeautySettings settings(!parser.isSet("fresh") && !parser.isSet("probe"));
+    BeautySettings settings(!parser.isSet("fresh") && !parser.isSet("probe") && !parser.isSet("library-probe"));
     BeautyVideoBridge bridge(&player, &settings);
-    const bool persistent = !parser.isSet("fresh") && !parser.isSet("probe");
+    const bool persistent = !parser.isSet("fresh") && !parser.isSet("probe") && !parser.isSet("library-probe");
     PlaybackSession session(&player, &bridge, persistent);
     VideoLibrary library(persistent);
     if (parser.isSet("library-folder")) library.addFolder(QUrl::fromLocalFile(parser.value("library-folder")));
+    library.setSearch(parser.value("library-search"));
     QQmlApplicationEngine engine;
+    auto *thumbnails = new ThumbnailProvider(parser.isSet("thumbnail-cache") ? parser.value("thumbnail-cache")
+        : QStandardPaths::writableLocation(QStandardPaths::CacheLocation) + "/thumbnails-v1");
+    engine.addImageProvider("thumbnails", thumbnails);
     engine.rootContext()->setContextProperty("player", &player);
     engine.rootContext()->setContextProperty("audio", &audio);
     engine.rootContext()->setContextProperty("beautySettings", &settings);
@@ -84,6 +96,8 @@ int main(int argc, char **argv) {
         auto *window = qobject_cast<QQuickWindow *>(engine.rootObjects().first()); window->resize(390, 844);
     }
     std::unique_ptr<PlaybackProbe> probe;
+    if (!engine.rootObjects().isEmpty() && parser.isSet("library-probe"))
+        runLibraryProbe(qobject_cast<QQuickWindow *>(engine.rootObjects().first()), &library, thumbnails, parser.value("library-probe"));
     if (!engine.rootObjects().isEmpty() && parser.isSet("probe")) {
         auto *window = qobject_cast<QQuickWindow *>(engine.rootObjects().first());
         if (parser.isSet("hidden")) window->hide();

@@ -6,6 +6,7 @@
 #include <QSaveFile>
 #include <QStandardPaths>
 #include <QJsonDocument>
+#include <QJsonArray>
 #include <QCryptographicHash>
 #ifdef Q_OS_ANDROID
 #include "android/AndroidBeautyResources.h"
@@ -82,12 +83,54 @@ QString mediaTitle(const QUrl &url) {
 #endif
     return url.fileName().isEmpty() ? url.host() : url.fileName();
 }
-QJsonObject scanAndroidVideos() {
+QJsonObject scanAndroidVideos(bool respectNoMedia) {
 #ifdef Q_OS_ANDROID
-    const auto json = QJniObject::callStaticObjectMethod(activityClass, "scanVideos", "(Landroid/content/Context;)Ljava/lang/String;", activity().object()).toString();
+    const auto json = QJniObject::callStaticObjectMethod(activityClass, "scanVideos", "(Landroid/content/Context;Z)Ljava/lang/String;", activity().object(), jboolean(respectNoMedia)).toString();
     return QJsonDocument::fromJson(json.toUtf8()).object();
 #else
+    Q_UNUSED(respectNoMedia);
     return {};
+#endif
+}
+QStringList videoFolders() {
+#ifdef Q_OS_ANDROID
+    const auto json = QJniObject::callStaticObjectMethod(activityClass, "videoFolders", "(Landroid/content/Context;)Ljava/lang/String;", activity().object()).toString();
+    QStringList result;
+    for (const auto &value : QJsonDocument::fromJson(json.toUtf8()).array()) result.append(value.toString());
+    return result;
+#else
+    return {};
+#endif
+}
+void cancelVideoScan() {
+#ifdef Q_OS_ANDROID
+    QJniObject::callStaticMethod<void>("org/beautyplayer/VideoIndex", "cancel", "()V");
+#endif
+}
+void chooseVideoFolder() {
+#ifdef Q_OS_ANDROID
+    QJniObject::callStaticMethod<void>(activityClass, "chooseVideoFolder", "(Landroid/content/Context;)V", activity().object());
+#endif
+}
+void removeVideoFolder(const QString &uri) {
+#ifdef Q_OS_ANDROID
+    QJniObject::callStaticMethod<void>(activityClass, "removeVideoFolder", "(Landroid/content/Context;Ljava/lang/String;)V", activity().object(), QJniObject::fromString(uri).object());
+#else
+    Q_UNUSED(uri);
+#endif
+}
+QImage videoThumbnail(const QUrl &url) {
+#ifdef Q_OS_ANDROID
+    const auto bytes = QJniObject::callStaticObjectMethod("org/beautyplayer/MediaThumbnails", "load", "(Landroid/content/Context;Ljava/lang/String;)[B", activity().object(), QJniObject::fromString(url.toString()).object());
+    if (!bytes.isValid()) return {};
+    QJniEnvironment env;
+    auto array = bytes.object<jbyteArray>(); const auto length = env->GetArrayLength(array);
+    if (length <= 0 || length > 8 * 1024 * 1024) return {};
+    QByteArray data(length, Qt::Uninitialized);
+    env->GetByteArrayRegion(array, 0, length, reinterpret_cast<jbyte *>(data.data()));
+    return QImage::fromData(data);
+#else
+    Q_UNUSED(url); return {};
 #endif
 }
 void requestVideoAccess() {

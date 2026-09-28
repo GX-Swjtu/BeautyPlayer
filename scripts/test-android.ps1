@@ -1,4 +1,5 @@
 param([string]$Serial, [string]$Video, [string]$MediaUri, [int]$Seconds = 35, [switch]$SelfTest, [switch]$Exercise,
+    [switch]$Library, [string]$Search = 'BeautyPlayer-', [ValidatePattern('^[a-zA-Z0-9_-]+$')][string]$ThumbnailCacheName = 'library-thumbnails-v04',
     [Alias('Profile')][ValidateSet('default','all','original')][string]$BeautyProfile = 'default', [switch]$SoftwareDecode)
 $ErrorActionPreference = 'Stop'
 if ($Video -and $MediaUri) { throw 'Choose -Video or -MediaUri, not both.' }
@@ -19,7 +20,7 @@ Invoke-Adb install -r $apk
 $package = 'org.beautyplayer.app'
 $appUid = ((Invoke-Adb shell dumpsys package $package | Select-String '(?:appId|userId)=(\d+)' | Select-Object -First 1).Matches[0].Groups[1].Value)
 $component = "$package/org.beautyplayer.PlayerActivity"
-if (!$SelfTest -and !$Video -and !$MediaUri) { Invoke-Adb shell am start -n $component; return }
+if (!$SelfTest -and !$Library -and !$Video -and !$MediaUri) { Invoke-Adb shell am start -n $component; return }
 $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
 $report = Join-Path $root "artifacts/android/device-$stamp"
 New-Item -ItemType Directory -Force $report | Out-Null
@@ -28,6 +29,7 @@ $remote = "/data/user/0/$package/files/validation"
 Invoke-Adb shell run-as $package mkdir -p $remote
 $prefix = "$remote/$stamp"
 if ($SelfTest) { $arguments = "--self-test $prefix" }
+elseif ($Library) { $arguments = "--fresh --library-probe $prefix --library-search `"$Search`" --thumbnail-cache $remote/$ThumbnailCacheName" }
 else {
     $source = $MediaUri
     if (!$source) {

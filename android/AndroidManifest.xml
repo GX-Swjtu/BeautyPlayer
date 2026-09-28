@@ -12,7 +12,7 @@
          Do not inject Qt Multimedia's optional capture feature permissions. -->
     <application android:name="org.qtproject.qt.android.bindings.QtApplication" android:label="映颜播放器"
         android:hardwareAccelerated="true" android:allowBackup="false" android:usesCleartextTraffic="true"
-        android:enableOnBackInvokedCallback="false" android:icon="@drawable/icon">
+        android:enableOnBackInvokedCallback="false" android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher">
         <activity android:name="org.beautyplayer.PlayerActivity" android:exported="true"
             android:configChanges="orientation|uiMode|screenLayout|screenSize|smallestScreenSize|layoutDirection|locale|fontScale|keyboard|keyboardHidden|navigation|mcc|mnc|density"
             android:launchMode="singleTop" android:screenOrientation="unspecified" android:windowSoftInputMode="adjustResize">

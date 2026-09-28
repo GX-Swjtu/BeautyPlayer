@@ -1,8 +1,8 @@
-# Android ARM64 版（v0.3.0）
+# Android ARM64 版（v0.4.0）
 
 已提供 APK 构建、安装和真机诊断脚本。最低 Android 9 / API 28，目标 API 36，CPU 为 **arm64-v8a**，GPU 需 OpenGL ES 3。适用于骁龙 8 Elite（8E）及满足条件的其他 ARM64 手机。没有限定高通机型或强制新指令；libyuv 按 CPU 实际能力分发。
 
-**已在 24129PN74C / SM8750（骁龙 8 Elite）、Android 16 真机安装运行。** 日志确认高通硬解与 Adreno 830 GPU 美颜；591 项转换检查和播放交互检查通过。设备使用 4 KB 内存页；16 KB 目前只完成静态 ELF/APK 对齐检查。未测其他手机，也没有功耗仪实测。见 [本轮测试记录](ANDROID-VALIDATION.md)。
+**已在 24129PN74C / SM8750（骁龙 8 Elite）、Android 16 真机安装运行。** v0.3 的日志确认高通硬解与 Adreno 830 GPU 美颜，591 项转换检查和播放交互检查通过；详见 [Android 初版测试记录](ANDROID-VALIDATION.md)。v0.4 已复测新视频库、缓存、授权目录及 39 项播放交互，见 [v0.4 验证记录](VALIDATION-v0.4.md)。设备使用 4 KB 内存页；16 KB 目前只完成静态 ELF/APK 对齐检查。未测其他手机，也没有功耗仪实测。
 
 ## 安装与操作
 
@@ -15,6 +15,8 @@
 这是 Release C++ 编译、使用本机 debug 密钥签名的测试包；不是商店发布版本。密钥在项目忽略目录，不提交 Git。换电脑生成的签名可能不同，不能保证覆盖安装。
 
 - 首次启动请求视频访问，查询 MediaStore.Video 索引，按文件夹分组。Android 14+ 部分授权时只显示获授权的视频。
+- 视频库支持带预览图的单列或双列显示，按文件名、创建时间、文件大小升降序排列；布局与排序会保存。预览图优先使用系统代表帧，无图或纯黑/白时尝试视频约 10% 处，缓存可跨启动复用，30 天未使用自动清理。
+- “⋮ → 视频库设置”可开关 `.nomedia` 过滤。关闭后，要通过“添加扫描文件夹”授权对应目录才能补充系统索引忽略的视频。不申请所有文件访问权限；Android 不允许授权的目录仍不可扫描。添加/移除目录不改动其中的视频。
 - 拒绝扫描权限仍可点“文件”，通过系统选择器打开。支持时保留 URI 读取授权；文件已删除、授权撤销或临时 URI 可能无法续播。
 - MediaStore 和系统选择器的 `content://` 地址由 ContentResolver 检查权限并打开只读文件描述符，再交给 QMediaPlayer；播放器保留原 URI 用于标题与续播，换片时关闭旧描述符。
 - 默认磨皮 70、美白 32、冷暖 −4、色调 +2.5；瘦脸、大眼、口红、腮红默认关闭。冷暖和色调作用于全画面。
@@ -59,6 +61,9 @@ Android 启用 Qt 的 `QT_ANDROID_NO_EXIT_CALL`，保留对象、线程和 Activ
 .\scripts\test-android.ps1 -Video .\test-media\face-1080.mp4 -Seconds 600
 # 软件解码对照
 .\scripts\test-android.ps1 -Video .\test-media\face-1080.mp4 -SoftwareDecode
+# 仅针对文件名匹配 BeautyPlayer- 的测试视频检查列表与缩略图
+.\scripts\test-android.ps1 -Library -ThumbnailCacheName library-check
+# 再执行一次同一命令，报告应显示 diskHits 增加、generated 为 0
 ~~~
 
 报告在 artifacts/android/device-日期时间。测试素材和报告使用应用私有目录，通过 debug 包的 `run-as` 读取，不要求扫描用户媒体权限；不会清空系统 logcat。检查实际 codec、renderer 是否 Adreno、converter、yuvConversions/qtConversions、textureBackedInputFrames、处理耗时、丢帧及音画 PTS 差。纹理句柄计数不能独立证明硬解。自动手势检查使用事件注入，真实手指操作仍需验证。`-SelfTest` 还包含标量/NEON 微基准，完成后可用普通启动命令恢复播放器。

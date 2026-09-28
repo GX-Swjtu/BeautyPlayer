@@ -1,6 +1,7 @@
 #include "ResumeStore.h"
 #include "VideoLibrary.h"
 #include "BeautySettings.h"
+#include "ThumbnailCache.h"
 #include <QtTest>
 #include <QTemporaryDir>
 #include <QFile>
@@ -8,6 +9,73 @@
 class LibraryHistoryTests : public QObject {
     Q_OBJECT
 private slots:
+    void noMediaPrunesDescendantsAndOverlappingRoots() {
+        QTemporaryDir dir; QDir().mkpath(dir.filePath("hidden/child"));
+        for (const auto *name : {"visible.mp4", "hidden/.nomedia", "hidden/private.mp4", "hidden/child/inside.mp4"}) {
+            QFile file(dir.filePath(name)); QVERIFY(file.open(QIODevice::WriteOnly)); file.write("fixture");
+        }
+        VideoLibrary library(false); library.addFolder(QUrl::fromLocalFile(dir.path()));
+        library.addFolder(QUrl::fromLocalFile(dir.filePath("hidden/child")));
+        QTRY_COMPARE_WITH_TIMEOUT(library.count(), 1, 10000); QTRY_VERIFY_WITH_TIMEOUT(!library.scanning(), 10000);
+        library.setRespectNoMedia(false);
+        QTRY_COMPARE_WITH_TIMEOUT(library.count(), 3, 10000);
+        library.setRespectNoMedia(true);
+        QTRY_COMPARE_WITH_TIMEOUT(library.count(), 1, 10000);
+        QVERIFY(QFile::remove(dir.filePath("hidden/.nomedia"))); library.refresh();
+        QTRY_COMPARE_WITH_TIMEOUT(library.count(), 3, 10000);
+    }
+    void sortingAndThumbnailIdentity() {
+        QTemporaryDir dir;
+        for (int n = 0; n < 3; ++n) {
+            QFile f(dir.filePath(QString("%1.mp4").arg(QChar('a' + n)))); QVERIFY(f.open(QIODevice::WriteOnly));
+            f.write(QByteArray(30 - n * 10, 'v'));
+            QVERIFY(f.setFileTime(QDateTime::fromSecsSinceEpoch(1700000000 + n * 1000), QFileDevice::FileBirthTime));
+        }
+        VideoLibrary library(false); library.addFolder(QUrl::fromLocalFile(dir.path()));
+        QTRY_COMPARE_WITH_TIMEOUT(library.count(), 3, 10000);
+        auto first = [&] { return library.data(library.index(0), VideoLibrary::NameRole).toString(); };
+        QCOMPARE(first(), "c.mp4");
+        library.setDescending(false); QCOMPARE(first(), "a.mp4");
+        library.setSortBy("size"); QCOMPARE(first(), "c.mp4");
+        library.setDescending(true); QCOMPARE(first(), "a.mp4");
+        library.setSortBy("name"); QCOMPARE(first(), "c.mp4");
+        library.setDescending(false); QCOMPARE(first(), "a.mp4");
+        library.setSortBy("invalid"); QCOMPARE(library.sortBy(), "name");
+        const auto before = library.data(library.index(0), VideoLibrary::ThumbnailRole).toString();
+        QFile f(dir.filePath("a.mp4")); QVERIFY(f.open(QIODevice::Append)); f.write("changed"); f.close();
+        library.refresh();
+        QTRY_VERIFY_WITH_TIMEOUT(before != library.data(library.index(0), VideoLibrary::ThumbnailRole).toString(), 10000);
+        library.setTwoColumns(true); QVERIFY(library.twoColumns());
+    }
+    void thumbnailCacheSurvivesRestartAndInvalidates() {
+        QTemporaryDir dir; int calls = 0;
+        auto generate = [&](const QUrl &) { ++calls; QImage image(64, 32, QImage::Format_RGB32); image.fill(Qt::green); return image; };
+        ThumbnailRequest request{QUrl::fromLocalFile(dir.filePath("movie.mp4")), 100, 200};
+        QCOMPARE(ThumbnailRequest::fromId(request.id()).url, request.url);
+        QVERIFY(!ThumbnailRequest::fromId("../bad").valid());
+        { ThumbnailCache cache(dir.path()); QVERIFY(!cache.load(request, generate).isNull()); QVERIFY(!cache.load(request, generate).isNull()); QCOMPARE(calls, 1); }
+        ThumbnailCache restarted(dir.path()); QVERIFY(!restarted.load(request, generate).isNull()); QCOMPARE(calls, 1);
+        ++request.modified; QVERIFY(!restarted.load(request, generate).isNull()); QCOMPARE(calls, 2);
+        ++request.bytes; QVERIFY(!restarted.load(request, generate).isNull()); QCOMPARE(calls, 3);
+        ThumbnailRequest missing{QUrl::fromLocalFile(dir.filePath("missing.mp4")), 0, 0};
+        int failures = 0;
+        auto fail = [&](const QUrl &) { ++failures; return QImage(); };
+        QVERIFY(restarted.load(missing, fail).isNull()); QVERIFY(restarted.load(missing, fail).isNull()); QCOMPARE(failures, 1);
+    }
+    void thumbnailCacheExpiresByAccessAndBoundsStorage() {
+        QTemporaryDir dir; ThumbnailCache cache(dir.path());
+        auto generate = [](const QUrl &) { QImage image(32, 32, QImage::Format_RGB32); image.fill(Qt::blue); return image; };
+        ThumbnailRequest old{QUrl::fromLocalFile(dir.filePath("old.mp4")), 1, 1}, used{QUrl::fromLocalFile(dir.filePath("used.mp4")), 1, 1};
+        cache.load(old, generate); cache.load(used, generate);
+        for (const auto &request : {old, used}) {
+            QFile file(dir.filePath(request.key() + ".jpg")); QVERIFY(file.open(QIODevice::ReadWrite));
+            QVERIFY(file.setFileTime(QDateTime::currentDateTimeUtc().addDays(-31), QFileDevice::FileModificationTime));
+        }
+        cache.load(used, generate); cache.prune();
+        QVERIFY(!QFile::exists(dir.filePath(old.key() + ".jpg"))); QVERIFY(QFile::exists(dir.filePath(used.key() + ".jpg")));
+        QFile unrelated(dir.filePath("user-photo.jpg")); QVERIFY(unrelated.open(QIODevice::WriteOnly)); unrelated.write("not a cache file"); unrelated.close();
+        cache.prune(0, 0); QVERIFY(!QFile::exists(dir.filePath(used.key() + ".jpg"))); QVERIFY(QFile::exists(unrelated.fileName()));
+    }
     void lightweightDefaults() {
         BeautySettings settings(false);
         QVERIFY(settings.snapshot().active()); QVERIFY(!settings.snapshot().needsFace());
