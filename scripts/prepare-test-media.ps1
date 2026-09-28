@@ -17,6 +17,9 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Face clip conversion failed' }
     & $FFmpeg -hide_banner -loglevel error -y -f lavfi -i 'testsrc2=size=1920x1080:rate=30:duration=20' -f lavfi -i 'aevalsrc=if(lt(mod(t\,1)\,0.04)\,0.4*sin(2*PI*1000*t)\,0):s=48000:d=20' -vf "drawbox=x=0:y=0:w=iw:h=ih:color=white:t=fill:enable='lt(mod(t,1),0.04)'" -c:v libx264 -preset fast -crf 20 -c:a aac -shortest test-media/sync-1080.mp4
     if ($LASTEXITCODE -ne 0) { throw 'Sync clip generation failed' }
+    # Keep the untagged clip for Qt fallback coverage and a tagged copy for SIMD.
+    & $FFmpeg -hide_banner -loglevel error -y -i test-media/sync-1080.mp4 -map 0 -c copy -bsf:v 'h264_metadata=video_full_range_flag=0:colour_primaries=1:transfer_characteristics=1:matrix_coefficients=1' -color_range tv -colorspace bt709 -color_trc bt709 -color_primaries bt709 test-media/sync-1080-bt709.mp4
+    if ($LASTEXITCODE -ne 0) { throw 'Tagged sync clip generation failed' }
     & $FFmpeg -hide_banner -loglevel error -y -f lavfi -i 'color=red:s=320x240:r=30:d=6' -vf 'drawbox=x=160:y=0:w=160:h=120:color=lime:t=fill,drawbox=x=0:y=120:w=160:h=120:color=blue:t=fill,drawbox=x=160:y=120:w=160:h=120:color=yellow:t=fill' -c:v libx264 -crf 12 test-media/colors.mp4
     if ($LASTEXITCODE -ne 0) { throw 'Color clip generation failed' }
     & $FFmpeg -hide_banner -loglevel error -y -display_rotation:v:0 90 -i test-media/colors.mp4 -c copy test-media/rotated.mp4

@@ -2,6 +2,11 @@
   "commit": "9069057a529d3130f518e54d68fbe86af62239c1",
   "files": [
     {
+      "path": "third_party/libyuv-source.zip",
+      "sha256": "B129A71A41AD6EEBF658CAE43685A56D3B3D89C7C9088B37F5F1C6ADCF45E5CC",
+      "url": "https://codeload.github.com/lemenkov/libyuv/zip/7320155784bdfefb69db8edddca37ecacf7e5198"
+    },
+    {
       "path": "third_party/gpupixel_windows_x86_64.zip",
       "sha256": "E58AC5AC8A3238F2AD46B1CCC7929850DDCF61D1671867122580F2E52B0D5082",
       "url": "https://github.com/pixpark/gpupixel/releases/download/v1.3.0-beta3/gpupixel_windows_x86_64.zip"
@@ -32,5 +37,10 @@
       "url": "https://raw.githubusercontent.com/pixpark/gpupixel/9069057a529d3130f518e54d68fbe86af62239c1/LICENSE"
     }
   ],
-  "version": "v1.3.0-beta3"
+  "version": "v1.3.0-beta3",
+  "libyuv": {
+    "commit": "7320155784bdfefb69db8edddca37ecacf7e5198",
+    "upstream": "https://chromium.googlesource.com/libyuv/libyuv",
+    "archiveMirror": "https://github.com/lemenkov/libyuv"
+  }
 }

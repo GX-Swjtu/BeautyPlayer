@@ -20,6 +20,8 @@
 
 需要 Windows x64、Visual Studio 2022 的“使用 C++ 的桌面开发”、Qt **6.11.2 MSVC 2022 x64**（Multimedia、Quick、Quick Controls）、CMake ≥3.24 和 Ninja。
 
+v0.2.1 额外用 **clang-cl** 编译 libyuv 的完整 SIMD 内核，播放器仍用 MSVC。脚本支持 PATH 中的 LLVM、VS C++ Clang 工具和 Android NDK 自带的 clang-cl；也可设置 `BEAUTY_CLANG_CL` 为其完整路径。缺少时可通过 `winget install LLVM.LLVM` 安装。运行便携包不需要这些编译工具。
+
 ```powershell
 git clone https://github.com/GX-Swjtu/BeautyPlayer.git
 cd BeautyPlayer
@@ -42,6 +44,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\package.ps1
 ## 性能与范围
 
 Qt FFmpeg 自动选择可用硬件解码器，本机日志确认使用 D3D11VA；美颜由 OpenGL GPU 执行。帧转换和 GPU 处理分别在两个工作线程运行，队列固定上限，过载时丢弃尚未处理的旧输入。原图模式直接传递 QVideoFrame，省去 RGBA 转换和 GPUPixel 上传/回读。输出图像缓冲区可安全复用。
+
+v0.2.1 使用 libyuv 加速常见 NV12/NV21/YUV420P/YV12 到 RGBA 的转换，运行时按 CPU 和操作系统能力选择 **AVX2 → SSSE3/SSE2 → 标量**，保留双线性色度插值、原分辨率和 BT.601/709 全/限范围。色彩信息不明确、HDR 或复杂 surface 变换继续交给 Qt。未对整个程序强制开启 AVX2；当前验证的是 Windows x64，Android ARM 尚未验证。
 
 保留原始像素尺寸。美颜路径仍有 CPU/GPU 数据传输，并非全程零拷贝；实际帧率取决于视频、GPU 和开启的特效。支持范围为 8 位 SDR、单人脸实时播放，不包含导出、HDR 保真或摄像头。实测数据与限制见 [v0.2 验证记录](docs/VALIDATION-v0.2.md)。
 
@@ -67,6 +71,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/benchmark.ps1
 ```
 
 `--profile` 可选 `default`（默认美颜）、`all`（固定全部特效，诊断默认值）、`original`；`--exercise` 自动操作暂停/对比/跳转/续播，并在可见窗口发送鼠标手势检查。`--hidden` 用于长测。诊断不修改用户的设置、历史或扫描目录。`--fresh` 同样临时使用独立的内存设置。
+
+`--converter auto` 是默认 SIMD 模式；`sse` 禁用 AVX、`scalar` 禁用 libyuv 特定指令集内核、`qt` 使用原 Qt 转换，方便在同一可执行文件中对照。诊断 JSON 记录实际转换后端和 libyuv/Qt 命中帧数。运行 `scripts/benchmark-simd.ps1` 可依次复测，细节见 [SIMD 验证记录](docs/VALIDATION-v0.2.1.md)。
 
 ## 结构与许可
 

@@ -70,6 +70,8 @@ private:
     double m_totalMs = 0, m_maxMs = 0;
     double m_conversionMs = 0, m_gpuMs = 0;
     qint64 m_bypassed = 0, m_hardwareFrames = 0;
+    qint64 m_yuvConversions = 0, m_qtConversions = 0;
+    QString m_inputFormat;
     QSize m_size;
     QVideoFrame m_originalPresented;
     qint64 m_lastPosition = 0;

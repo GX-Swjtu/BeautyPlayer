@@ -89,6 +89,10 @@ void BeautyVideoBridge::reprocess() {
 }
 void BeautyVideoBridge::acceptFrame(const QVideoFrame &frame) {
     if (!frame.isValid()) return;
+    const auto format = frame.surfaceFormat();
+    m_inputFormat = QStringLiteral("%1 space=%2 range=%3 transfer=%4")
+        .arg(QVideoFrameFormat::pixelFormatToString(format.pixelFormat()))
+        .arg(int(format.colorSpace())).arg(int(format.colorRange())).arg(int(format.colorTransfer()));
     ++m_received;
     if (frame.handleType() == QVideoFrame::RhiTextureHandle) ++m_hardwareFrames;
     if (m_pending.isValid()) ++m_dropped;
@@ -144,10 +148,12 @@ void BeautyVideoBridge::dispatch() {
     const auto epoch = m_epoch, revision = m_revision; m_converting = true;
     QMetaObject::invokeMethod(m_converter, [this, frame, parameters, epoch, revision] {
         QElapsedTimer timer; timer.start();
-        auto image = normalizedFrameImage(frame);
+        bool usedYuv = false;
+        auto image = normalizedFrameImage(frame, &usedYuv);
         const auto ms = timer.nsecsElapsed() / 1000000.0;
-        QMetaObject::invokeMethod(this, [this, image = std::move(image), frame, parameters, epoch, revision, ms]() mutable {
+        QMetaObject::invokeMethod(this, [this, image = std::move(image), frame, parameters, epoch, revision, ms, usedYuv]() mutable {
             m_converting = false;
+            if (usedYuv) ++m_yuvConversions; else ++m_qtConversions;
             if (epoch != m_epoch || revision != m_revision) ++m_stale;
             else if (image.isNull()) { m_error = QStringLiteral("视频帧无法转换为 RGBA"); m_status = m_error; emit statusChanged(); }
             else m_prepared = Prepared{std::move(image), frame, parameters, epoch, revision, ms};
@@ -158,6 +164,8 @@ void BeautyVideoBridge::dispatch() {
 QJsonObject BeautyVideoBridge::metrics() const {
     const auto count = m_processed - m_bypassed;
     return {{"ready", m_ready}, {"error", m_error}, {"renderer", m_renderer}, {"received", m_received},
+        {"converter", frameConversionBackend()}, {"yuvConversions", m_yuvConversions},
+        {"qtConversions", m_qtConversions}, {"inputFormat", m_inputFormat},
         {"presented", m_processed}, {"droppedPending", m_dropped}, {"discardedStale", m_stale}, {"faceFrames", m_faceFrames},
         {"bypassFrames", m_bypassed}, {"textureBackedInputFrames", m_hardwareFrames},
         {"meanConversionMs", count ? m_conversionMs / count : 0}, {"meanGpuStageMs", count ? m_gpuMs / count : 0},

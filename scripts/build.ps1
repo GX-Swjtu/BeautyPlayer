@@ -24,7 +24,8 @@ foreach ($line in $environmentLines) {
     if ($line -match '^([^=]+)=(.*)$') { [Environment]::SetEnvironmentVariable($matches[1], $matches[2], 'Process') }
 }
 $build = Join-Path $root 'build/windows-release'
-& $cmake -S $root -B $build -G Ninja -DCMAKE_BUILD_TYPE=Release "-DCMAKE_PREFIX_PATH=$QtRoot" "-DCMAKE_MAKE_PROGRAM=$ninja"
+$clang = Find-ClangCl $vs
+& $cmake -S $root -B $build -G Ninja -DCMAKE_BUILD_TYPE=Release "-DCMAKE_PREFIX_PATH=$QtRoot" "-DCMAKE_MAKE_PROGRAM=$ninja" "-DBEAUTY_CLANG_CL=$clang"
 if ($LASTEXITCODE -ne 0) { throw 'CMake configure failed' }
 if ($Target) { & $cmake --build $build --parallel $Jobs --target $Target }
 else { & $cmake --build $build --parallel $Jobs }

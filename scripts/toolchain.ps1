@@ -32,3 +32,16 @@ function Find-BuildTool([string]$Name, [string]$QtRoot, [string]$Bundled) {
     if (Test-Path -LiteralPath $tool) { return $tool }
     throw "Cannot find $Name. Install it or add it to PATH."
 }
+function Find-ClangCl([string]$VsRoot) {
+    if ($env:BEAUTY_CLANG_CL -and (Test-Path -LiteralPath $env:BEAUTY_CLANG_CL)) { return $env:BEAUTY_CLANG_CL }
+    $command = Get-Command clang-cl.exe -ErrorAction SilentlyContinue
+    if ($command) { return $command.Source }
+    $candidates = @((Join-Path $VsRoot 'VC/Tools/Llvm/x64/bin/clang-cl.exe'), 'C:/Program Files/LLVM/bin/clang-cl.exe', 'D:/Program Files/LLVM/bin/clang-cl.exe')
+    foreach ($sdk in @($env:ANDROID_SDK_ROOT, $env:ANDROID_HOME, 'D:/Android/Sdk')) {
+        if ($sdk -and (Test-Path -LiteralPath (Join-Path $sdk 'ndk'))) {
+            $candidates += Get-ChildItem -LiteralPath (Join-Path $sdk 'ndk') -Directory | Sort-Object Name -Descending | ForEach-Object { Join-Path $_.FullName 'toolchains/llvm/prebuilt/windows-x86_64/bin/clang-cl.exe' }
+        }
+    }
+    foreach ($candidate in $candidates) { if (Test-Path -LiteralPath $candidate) { return $candidate } }
+    throw 'Install LLVM (winget install LLVM.LLVM), VS C++ Clang tools, or set BEAUTY_CLANG_CL to clang-cl.exe. Only libyuv uses Clang.'
+}

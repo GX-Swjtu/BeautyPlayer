@@ -27,6 +27,13 @@ The unmodified official Windows release includes `mars-face-kit.dll`, face detec
 The repository's MIT license covers neither an independent redistribution grant for that closed component nor its models. `scripts/setup.ps1` retrieves the original upstream SDK for local building. No SDK or portable binaries are uploaded by this source publication; a public binary release requires checking the upstream component's redistribution terms separately.
 Exact download hashes are recorded in `dependencies.lock.json`.
 
+## libyuv
+
+Pinned source commit `7320155784bdfefb69db8edddca37ecacf7e5198` from https://chromium.googlesource.com/libyuv/libyuv .
+The archive is fetched from the same commit in the https://github.com/lemenkov/libyuv mirror, with SHA256 in `dependencies.lock.json`.
+Statically linked, BSD-3-Clause; notices in `licenses/libyuv-LICENSE.txt`, `licenses/libyuv-PATENTS.txt` and `licenses/libyuv-AUTHORS.txt`.
+Built with clang-cl, JPEG disabled, and `LIBYUV_UNLIMITED_DATA` for more accurate YUV coefficients. Upstream source is unmodified. CPU/OS feature detection selects the applicable scalar, SSE or AVX2 kernels; no application-wide AVX2 requirement is introduced.
+
 ## OpenGL support
 
 GLAD 0.1.36 generated loader and Khronos platform header, taken from the pinned GPUPixel source tree. Licenses: `licenses/GLAD.txt`, `licenses/Khronos.txt`.

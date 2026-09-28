@@ -12,6 +12,10 @@ QMediaPlayer 输出到独立输入 QVideoSink。v0.2 将帧转换移至 VideoCon
 
 Qt 的 `QVideoFrame::toImage()` 已处理 surface transformation，但未处理 frame presentation rotation/mirroring。FrameConversion 依次补充 frame rotation、horizontal mirror，然后以无额外变换的 QVideoFrame 输出。
 
+v0.2.1 在 FrameConversion 增加 libyuv 分支：映射已解码的 8 位 NV12/NV21/YUV420P/YV12，校验每个平面的长度和 stride，按 BT.601/709 及 full/video range 转 RGBA。NV12/NV21 先 SplitUVPlane，再 I420ToARGBMatrixFilter，保留双线性色度插值。使用 Yvu 矩阵并交换 UV，适配 little-endian 的 RGBA 字节顺序。`LIBYUV_UNLIMITED_DATA` 保留更精确的蓝色系数。元数据未知、其他 transfer、crop、surface rotation/mirror 或上下颠倒时回退 Qt，然后统一补充 frame presentation 变换。
+
+libyuv 用 clang-cl 单独编译，保留上游手写 SSE/AVX2 内核；Qt 应用仍用 MSVC。启动时 MaskCpuFlags 与真实 CPU/OS 能力取交集，默认最多允许 AVX2，不对整个应用使用 /arch:AVX2。该全局配置在工作线程启动前固定，不能在播放中修改。转换线程有独立 UV 临时区和三个 RGBA 槽，只有 isDetached 的槽可复用；全部仍被引用时分配独立图像。桥接层记录实际 libyuv/Qt 转换次数，避免把 CPU 支持 AVX2 误当成每一帧都命中加速。
+
 ## 旧版库兼容点
 
 1. `SourceRawDataInput::uploadBytes` 的 stride 参数实际是像素数；使用连续 RGBA 并传 width。

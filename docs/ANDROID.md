@@ -1,6 +1,6 @@
 # Android 移植边界
 
-v0.2 仍只有 Windows 可构建和已验证；CMake 在其他平台明确报错，避免把未完成适配的工程当作可用 APK。手机界面（390×844 窄屏）、长按、滑动、续播使用共用 QML/C++，已在 Windows 预览及事件注入检查；没有 Android 真机结论。
+v0.2.1 仍只有 Windows 可构建和已验证；CMake 在其他平台明确报错，避免把未完成适配的工程当作可用 APK。手机界面（390×844 窄屏）、长按、滑动、续播使用共用 QML/C++，已在 Windows 预览及事件注入检查；没有 Android 真机结论。此次 libyuv 的 AVX2/SSE 分发针对 Windows x64；未来 Android ARM 应使用其 NEON 等内核并重新验证，不能直接套用这些性能数据。
 
 可复用部分：QML 播放器、QMediaPlayer/QVideoSink 帧桥接、有界队列、参数设置，以及 GPUPixelPipeline 的 `QImage RGBA → QImage RGBA` 接口。GPUPixel 不接收 Qt 的 Direct3D 纹理，界面层不依赖 Win32。原始分辨率策略同样可复用。
 

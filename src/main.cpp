@@ -11,13 +11,14 @@
 #include "PlaybackProbe.h"
 #include "PlaybackSession.h"
 #include "VideoLibrary.h"
+#include "FrameConversion.h"
 #include <cstdio>
 
 int main(int argc, char **argv) {
     QGuiApplication app(argc, argv);
     QCoreApplication::setOrganizationName("BeautyPlayer");
     QCoreApplication::setApplicationName("BeautyPlayer");
-    QCoreApplication::setApplicationVersion("0.2.0");
+    QCoreApplication::setApplicationVersion("0.2.1");
     QQuickStyle::setStyle("Material");
     QCommandLineParser parser; parser.addHelpOption(); parser.addVersionOption();
     parser.addPositionalArgument("video", "Local video or HTTP(S) URL");
@@ -29,7 +30,9 @@ int main(int argc, char **argv) {
     parser.addOption({"profile", "Probe beauty profile: default, all, original", "profile", "all"});
     parser.addOption({"phone", "Preview the responsive phone layout (390 x 844)"});
     parser.addOption({"library-folder", "Add a folder to the video library", "folder"});
+    parser.addOption({"converter", "Frame conversion: auto (AVX2/SSE fallback), sse, scalar, qt", "mode", "auto"});
     parser.process(app);
+    if (!configureFrameConversion(parser.value("converter"))) parser.showHelp(2);
     if (parser.isSet("probe")) qInstallMessageHandler([](QtMsgType type, const QMessageLogContext &context, const QString &message) {
         const auto line = qFormatLogMessage(type, context, message).toUtf8();
         std::fprintf(stderr, "%s\n", line.constData()); std::fflush(stderr);
