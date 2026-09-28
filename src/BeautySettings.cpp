@@ -21,6 +21,12 @@ BeautySettings::BeautySettings(bool persistent, QObject *parent) : QObject(paren
             m_parameters.values[i] = std::isfinite(value) ? std::clamp(value, (i == 2 || i == 3) ? -1.f : 0.f, 1.f) : 0;
         }
         m_parameters.enabled = s.value("beauty/presetVersion", 0).toInt() >= 2 ? s.value("beauty/enabled", true).toBool() : true;
+        // Migrate the old preset values once; keep intentional user adjustments.
+        if (s.value("beauty/presetVersion", 0).toInt() < 3) {
+            if (std::abs(m_parameters.values[2] + .04f) < .0001f) m_parameters.values[2] = 0;
+            if (std::abs(m_parameters.values[3] - .025f) < .0001f) m_parameters.values[3] = 0;
+            if (std::abs(m_parameters.values[1] - .32f) < .0001f) m_parameters.values[1] = .20f;
+        }
     }
 }
 BeautySettings::~BeautySettings() { save(); }
@@ -45,7 +51,7 @@ void BeautySettings::reset() { m_parameters = BeautyParameters::recommended(); e
 void BeautySettings::save() {
     if (!m_persistent) return;
     QSettings s;
-    s.setValue("beauty/presetVersion", 2);
+    s.setValue("beauty/presetVersion", 3);
     for (int i = 0; i < BeautyParameters::Count; ++i) s.setValue(QStringLiteral("beauty/") + key(i), m_parameters.values[i]);
     s.setValue("beauty/enabled", m_parameters.enabled);
 }

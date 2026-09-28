@@ -22,12 +22,18 @@ ApplicationWindow {
     property bool controlsVisible: true
     property bool fullScreen: visibility === Window.FullScreen
     property string errorText: ""
+    property point lastMousePosition: Qt.point(-1, -1)
     function toggleFullScreen() { fullScreen ? showNormal() : showFullScreen() }
     function timeText(ms) {
         let s = Math.max(0, Math.floor(ms / 1000))
         return (s >= 3600 ? Math.floor(s / 3600) + ":" : "") + Math.floor(s / 60 % 60).toString().padStart(2,"0") + ":" + (s % 60).toString().padStart(2,"0")
     }
     function showControls() { controlsVisible = true; hideTimer.restart() }
+    onLibraryOpenChanged: if (libraryOpen) {
+        playbackSession.pauseForLibrary()
+        panelOpen = false
+        hideTimer.stop()
+    }
     onClosing: close => {
         if (!android) return
         if (panelOpen) { panelOpen = false; close.accepted = false }
@@ -38,7 +44,14 @@ ApplicationWindow {
         if (!panelOpen) { bridge.compareOriginal = false; showControls() }
     }
     Component.onCompleted: bridge.outputSink = videoOutput.videoSink
-    Timer { id: hideTimer; interval: 4500; onTriggered: if (player.playbackState === MediaPlayer.PlayingState && !root.panelOpen && !root.libraryOpen && !seekBar.pressed) root.controlsVisible = false }
+    Timer {
+        id: hideTimer; objectName: "controlsHideTimer"; interval: root.android ? 4500 : 2500
+        onTriggered: {
+            if (root.panelOpen || root.libraryOpen) return
+            if (seekBar.pressed || gestures.pressed || playbackMenu.opened || optionsDialog.opened || urlDialog.opened) { restart(); return }
+            if (!root.android || player.playbackState === MediaPlayer.PlayingState) root.controlsVisible = false
+        }
+    }
     Connections {
         target: bridge
         function onSourceOpened() { root.libraryOpen = false; root.showControls(); root.errorText = "" }
@@ -50,12 +63,12 @@ ApplicationWindow {
         function onPlaybackStateChanged() { root.showControls() }
     }
     Connections { target: playbackSession; function onNoticeChanged() { if (playbackSession.notice !== "") { toast.text = playbackSession.notice; toastTimer.restart() } } }
-    Shortcut { sequence: "Space"; enabled: !urlDialog.opened; onActivated: playbackSession.togglePlayback() }
+    Shortcut { sequence: "Space"; enabled: !root.libraryOpen && !urlDialog.opened; onActivated: playbackSession.togglePlayback() }
     Shortcut { sequence: "Ctrl+O"; onActivated: fileDialog.open() }
     Shortcut { sequence: "F11"; onActivated: root.toggleFullScreen() }
     Shortcut { sequence: "Escape"; onActivated: { if (root.panelOpen) root.panelOpen = false; else if (root.fullScreen) root.showNormal(); else if (root.libraryOpen && player.source.toString() !== "") root.libraryOpen = false } }
-    Shortcut { sequence: "Left"; onActivated: { bridge.seek(player.position - 10000); root.showControls() } }
-    Shortcut { sequence: "Right"; onActivated: { bridge.seek(player.position + 10000); root.showControls() } }
+    Shortcut { sequence: "Left"; enabled: !root.libraryOpen; onActivated: { bridge.seek(player.position - 10000); root.showControls() } }
+    Shortcut { sequence: "Right"; enabled: !root.libraryOpen; onActivated: { bridge.seek(player.position + 10000); root.showControls() } }
 
     FileDialog {
         id: fileDialog; title: "选择视频"
@@ -118,7 +131,7 @@ ApplicationWindow {
         gradient: Gradient { GradientStop { position: 0; color: "#db0b1115" } GradientStop { position: 1; color: "#000b1115" } }
         RowLayout {
             anchors.fill: parent; anchors.margins: 14; anchors.bottomMargin: 26; spacing: 8
-            ToolButton { text: "‹  视频库"; implicitHeight: 48; onClicked: { root.libraryOpen = true; playbackSession.endHold() } }
+            ToolButton { objectName: "backToLibrary"; text: "‹  视频库"; implicitHeight: 48; onClicked: root.libraryOpen = true }
             Label { text: playbackSession.title; elide: Text.ElideMiddle; Layout.fillWidth: true; font.pixelSize: 16; color: "#edf5f3" }
             ToolButton { text: "⋮"; font.pixelSize: 25; implicitWidth: 48; onClicked: playbackMenu.popup() }
         }
@@ -173,6 +186,34 @@ ApplicationWindow {
     }
     Timer { id: toastTimer; interval: 3500 }
 
+    Item {
+        anchors.fill: parent; z: 90; visible: !root.android && !root.libraryOpen && !root.panelOpen
+        HoverHandler {
+            id: desktopHover; acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+            blocking: false
+            onPointChanged: {
+                if (!hovered) return
+                const p = point.position
+                if (p.x === root.lastMousePosition.x && p.y === root.lastMousePosition.y) return
+                root.lastMousePosition = p
+                if (p.y >= root.height - (root.compact ? 200 : 176)) root.showControls()
+                else if (root.controlsVisible) hideTimer.restart()
+            }
+        }
+    }
+    DropArea {
+        id: videoDrop; objectName: "videoDropArea"; anchors.fill: parent; z: 100; enabled: !root.android
+        onEntered: drag => { drag.accepted = drag.hasUrls && playbackSession.firstDroppedVideo(drag.urls).toString() !== "" }
+        onDropped: drop => {
+            const video = playbackSession.firstDroppedVideo(drop.urls)
+            if (video.toString() !== "") { root.panelOpen = false; bridge.open(video); drop.accept(Qt.CopyAction) }
+        }
+        Rectangle {
+            anchors.fill: parent; visible: videoDrop.containsDrag; color: "#bb101c18"; border.color: "#a5ead3"; border.width: 2
+            Label { anchors.centerIn: parent; text: "松开即可播放视频"; font.pixelSize: 24; color: "#c4f7e2" }
+        }
+    }
+
     Rectangle {
         id: libraryPage; anchors.fill: parent; visible: root.libraryOpen; color: "#101619"
         ColumnLayout {
@@ -198,6 +239,7 @@ ApplicationWindow {
                     Material.foreground: highlighted ? "#10372a" : "#dcebe4"
                     contentItem: Text { text: parent.text; font: parent.font; color: parent.highlighted ? "#10372a" : "#dcebe4"; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
                     onClicked: videoLibrary.folder = modelData.path
+                    onPressAndHold: if (modelData.path !== "") { folderBlockMenu.path = modelData.path; folderBlockMenu.popup() }
                     ToolTip.visible: hovered; ToolTip.text: modelData.path || "全部视频"
                 }
             }
@@ -278,8 +320,44 @@ ApplicationWindow {
         MenuItem { text: "授权 / 重新选择视频"; visible: root.android; height: visible ? implicitHeight : 0; onTriggered: videoLibrary.requestAccess() }
         MenuItem { text: "视频库设置"; onTriggered: libraryOptions.open() }
         MenuItem { text: "管理扫描目录"; onTriggered: foldersDialog.open() }
+        MenuItem { text: "屏蔽文件夹"; onTriggered: blockedFoldersDialog.open() }
         MenuItem { text: "播放网址"; onTriggered: urlDialog.open() }
         MenuItem { text: "播放设置"; onTriggered: optionsDialog.open() }
+    }
+    Menu {
+        id: folderBlockMenu; property string path: ""
+        MenuItem { text: "屏蔽此文件夹及子文件夹"; onTriggered: videoLibrary.setFolderBlocked(folderBlockMenu.path, true) }
+    }
+    Dialog {
+        id: blockedFoldersDialog; objectName: "blockedFoldersDialog"; title: "屏蔽文件夹"; anchors.centerIn: parent
+        width: Math.min(550, root.width - 24); modal: true
+        footer: DialogButtonBox { Button { text: "关闭"; DialogButtonBox.buttonRole: DialogButtonBox.RejectRole } onRejected: blockedFoldersDialog.close() }
+        contentItem: ColumnLayout {
+            spacing: 8
+            Label { text: "屏蔽后不出现在视频库中，文件仍保留。\n同时屏蔽子文件夹，可随时恢复。"; Layout.fillWidth: true; wrapMode: Text.Wrap; color: "#abc0b6"; font.pixelSize: 12 }
+            ListView {
+                Layout.fillWidth: true; Layout.preferredHeight: Math.min(360, root.height * .5); clip: true
+                model: videoLibrary.folderOptions
+                ScrollBar.vertical: ScrollBar { }
+                delegate: RowLayout {
+                    required property var modelData
+                    width: ListView.view.width; height: 68
+                    ColumnLayout {
+                        Layout.fillWidth: true; spacing: 2
+                        Label { text: modelData.name; Layout.fillWidth: true; elide: Text.ElideMiddle; color: modelData.blocked ? "#859b91" : "#e0ede8" }
+                        Label { text: modelData.path; Layout.fillWidth: true; elide: Text.ElideLeft; font.pixelSize: 10; color: "#82988e" }
+                    }
+                    Button {
+                        text: modelData.explicitBlock ? "恢复" : modelData.blocked ? "随父目录" : "屏蔽"
+                        enabled: !modelData.blocked || modelData.explicitBlock
+                        implicitHeight: 48; implicitWidth: 76; flat: true
+                        Accessible.name: text + " " + modelData.name
+                        onClicked: videoLibrary.setFolderBlocked(modelData.path, !modelData.explicitBlock)
+                    }
+                }
+                Label { anchors.centerIn: parent; text: "暂无可管理的文件夹"; visible: parent.count === 0; color: "#95aaa2" }
+            }
+        }
     }
     Dialog {
         id: libraryOptions; title: "视频库设置"; anchors.centerIn: parent

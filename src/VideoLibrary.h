@@ -17,6 +17,7 @@ class VideoLibrary : public QAbstractListModel {
     Q_PROPERTY(bool scanning READ scanning NOTIFY statusChanged)
     Q_PROPERTY(QString status READ status NOTIFY statusChanged)
     Q_PROPERTY(QVariantList folders READ folders NOTIFY foldersChanged)
+    Q_PROPERTY(QVariantList folderOptions READ folderOptions NOTIFY foldersChanged)
     Q_PROPERTY(QStringList roots READ roots NOTIFY rootsChanged)
     Q_PROPERTY(QString folder READ folder WRITE setFolder NOTIFY filterChanged)
     Q_PROPERTY(QString search READ search WRITE setSearch NOTIFY filterChanged)
@@ -35,6 +36,9 @@ public:
     bool scanning() const { return m_watcher.isRunning(); }
     QString status() const { return m_status; }
     QVariantList folders() const;
+    QVariantList folderOptions() const;
+    bool isFolderBlocked(const QString &path) const;
+    Q_INVOKABLE void setFolderBlocked(const QString &path, bool blocked);
     QStringList roots() const { return m_roots; }
     QString folder() const { return m_folder; }
     void setFolder(const QString &value);
@@ -70,7 +74,7 @@ private:
     bool m_persistent, m_refreshAgain = false;
     bool m_respectNoMedia = true, m_twoColumns = false, m_descending = true;
     QString m_sortBy = "created";
-    QStringList m_roots;
+    QStringList m_roots, m_blockedFolders;
     QString m_folder, m_search, m_status;
     QVector<VideoEntry> m_entries;
     QVector<int> m_visible;

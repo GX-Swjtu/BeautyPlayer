@@ -5,6 +5,7 @@
 #include <QStandardPaths>
 #include <QSettings>
 #include <QFileInfo>
+#include <QSet>
 #include <cmath>
 
 PlaybackSession::PlaybackSession(QMediaPlayer *player, BeautyVideoBridge *bridge, bool persistent, QObject *parent)
@@ -91,4 +92,15 @@ void PlaybackSession::endHold() {
 void PlaybackSession::togglePlayback() {
     endHold();
     m_player->playbackState() == QMediaPlayer::PlayingState ? m_player->pause() : m_player->play();
+}
+void PlaybackSession::pauseForLibrary() {
+    endHold(); m_player->pause(); save();
+}
+QUrl PlaybackSession::firstDroppedVideo(const QList<QUrl> &urls) const {
+    static const QSet<QString> extensions{"mp4", "mkv", "mov", "avi", "webm", "m4v", "ts", "mts", "m2ts", "wmv", "flv", "mpg", "mpeg", "3gp"};
+    for (const auto &url : urls) {
+        const QFileInfo file(url.toLocalFile());
+        if (url.isLocalFile() && file.isFile() && extensions.contains(file.suffix().toLower())) return url;
+    }
+    return {};
 }

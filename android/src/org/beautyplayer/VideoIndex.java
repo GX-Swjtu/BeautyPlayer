@@ -85,7 +85,8 @@ public final class VideoIndex {
                         // trees below also enforce the rule without raw-path access.
                         if (respectNoMedia && path != null && path.startsWith("/") && hasNoMedia(new File(path).getParentFile(), hiddenFolders)) continue;
                         String key = path == null || path.isEmpty() ? uri : path;
-                        videos.put(key, entry(cursor.getString(1), cursor.getString(3) + "/" + cursor.getString(2), uri,
+                        String folder = path != null && path.startsWith("/") ? new File(path).getParent() : "媒体库/" + cursor.getString(3) + "/" + cursor.getString(2);
+                        videos.put(key, entry(cursor.getString(1), folder, uri,
                             cursor.getLong(4), cursor.getLong(5) * 1000, cursor.getLong(8) > 0 ? cursor.getLong(8) : cursor.getLong(6) * 1000));
                     }
                 }
@@ -120,7 +121,9 @@ public final class VideoIndex {
                                     String key = pathKey(tree, id);
                                     JSONObject indexed = videos.get(key);
                                     long created = indexed != null ? indexed.optLong("created") : cursor.getLong(4);
-                                    granted.put(key, entry(name, "目录/" + directory[1], uri, cursor.getLong(3), cursor.getLong(4), created));
+                                    String folder = "com.android.externalstorage.documents".equals(tree.getAuthority()) ? pathKey(tree, directory[0])
+                                        : "授权目录/" + tree.getAuthority() + "/" + directory[1];
+                                    granted.put(key, entry(name, folder, uri, cursor.getLong(3), cursor.getLong(4), created));
                                 }
                             }
                         }

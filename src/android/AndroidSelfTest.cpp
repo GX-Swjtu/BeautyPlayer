@@ -1,6 +1,7 @@
 #include "GPUPixelPipeline.h"
 #include "FrameConversion.h"
 #include "PlatformServices.h"
+#include "../../tests/WhiteningChecks.h"
 #include <QJsonDocument>
 #include <QJsonArray>
 #include <QSaveFile>
@@ -13,6 +14,7 @@ int runFrameConversionTests(const QStringList &arguments);
 
 int runAndroidSelfTest(const QString &prefix) {
     QJsonArray checks;
+    QJsonArray whitening;
     bool success = true;
     const auto check = [&](const QString &name, bool value) {
         checks.append(QJsonObject{{"name", name}, {"passed", value}}); success &= value;
@@ -45,6 +47,10 @@ int runAndroidSelfTest(const QString &prefix) {
             check("retained_output_not_overwritten", identity == input);
             auto beauty = pipeline.process(input, BeautyParameters::recommended()).image;
             check("default_beauty_changes_pixels", beauty.size() == input.size() && beauty != input);
+            whitening = whiteningChecks(pipeline, input, prefix);
+            bool continuous = true;
+            for (const auto &row : whitening) continuous &= row.toObject()["passed"].toBool();
+            check("whitening_continuous_from_zero_with_and_without_smoothing", continuous);
             input.save(prefix + "-original.png"); beauty.save(prefix + "-beauty.png");
             auto heavy = BeautyParameters::recommended();
             for (int i = BeautyParameters::Slimming; i < BeautyParameters::Count; ++i) heavy.values[i] = .4f;
@@ -57,7 +63,7 @@ int runAndroidSelfTest(const QString &prefix) {
     QSaveFile file(prefix + ".json");
     if (!file.open(QIODevice::WriteOnly)) return 2;
     file.write(QJsonDocument(QJsonObject{{"passed", success}, {"checks", checks}, {"renderer", renderer},
-        {"converter", frameConversionBackend()}, {"conversionLog", QString::fromStdString(conversionLog.str())}, {"error", error}}).toJson());
+        {"whitening", whitening}, {"converter", frameConversionBackend()}, {"conversionLog", QString::fromStdString(conversionLog.str())}, {"error", error}}).toJson());
     if (!file.commit()) return 2;
     return success ? 0 : 1;
 }

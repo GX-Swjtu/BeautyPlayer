@@ -37,6 +37,8 @@ ResumeStore 用原子文件写入保存最近 200 个位置，使用 URL 的 SHA
 
 PlaybackSession 保存正常倍速与临时长按状态。松手、取消触摸、暂停、换源或应用失去活动状态均恢复正常倍速。水平滑动超过 18 像素且大于垂直位移 1.2 倍后开始预览；一屏映射最多 120 秒，松手才提交一次 seek。视频层手势不覆盖上层按钮或抽屉。
 
+`libraryOpen` 从播放切到列表时统一调用 `pauseForLibrary()`，结束临时倍速、暂停并保存续播；返回按钮和 Android 返回键都走此逻辑。视频库内禁用空格播放和左右快进快捷键，避免搜索时恢复后台播放。Windows DropArea 只接受存在的视频文件，目录/非视频不接收，拖入多个文件时播放第一个有效视频，以 CopyAction 接收而不移动源文件。非阻塞 HoverHandler 监听鼠标/触控板位置，底部移动显示控制栏；静止 2.5 秒后隐藏，拖动进度或打开设置/菜单时暂缓隐藏。
+
 VideoLibrary 使用 QtConcurrent 工作线程读取目录元数据，不跟随目录符号链接，最多 10 万条。扫描与视频解码、缩略图生成分开；按文件名、创建时间或大小在内存模型中排序，支持自然数字排序及升降序。单列和双列共用 GridView，复用可见项。Windows 启动先读索引缓存再刷新；重复刷新取消旧扫描并重新扫描。未实现文件系统实时监听，文件变更后点击刷新。
 
 Android 优先读取 MediaStore 索引，另通过 ACTION_OPEN_DOCUMENT_TREE 读取用户明确授权的目录。每个目录查询一次子项，先检查 `.nomedia` 再遍历子目录；与 MediaStore 按路径去重，授权目录内以当前扫描策略为准。扫描使用 CancellationSignal 取消。默认识别 `.nomedia`，关闭后可以扫描授权树中未被系统索引收录的视频；没有目录授权时无法绕过 Android 存储限制。Android 不保存额外媒体索引 JSON，避免撤销权限后继续显示旧文件名。
@@ -47,9 +49,15 @@ ThumbnailCache 用 URL、文件大小、修改时间和格式版本生成 SHA256
 
 缓存、目录配置和播放历史只存本机。排序、布局及 `.nomedia` 偏好写入 QSettings。诊断/--fresh 模式不保存这些偏好；缩略图诊断可用 `--thumbnail-cache` 指向隔离目录。创建时间优先采用 Windows birthTime 或 Android 拍摄时间；不可获得时按平台回退入库时间或修改时间。
 
+屏蔽目录单独保存到 `library/blockedFolders`，在搜索、排序和文件夹计数之前应用于内存索引，不删除媒体。匹配完整目录或带分隔符的子路径，避免 `private` 误伤 `private2`。Android 外部存储的 MediaStore 和 SAF 使用同一文件夹路径标识，授权方式切换不影响屏蔽。无法取得实际路径的其他文档提供器保留提供器/授权树内的逻辑路径；跨不同提供器别名不保证自动合并。
+
 ## 参数映射
 
 界面常规强度 0–100 对应内部 0–1。磨皮/美白直接传值；瘦脸映射至 0–0.08，大眼 0–0.15，口红/腮红 0–0.5。冷暖/色调为 -100–100；冷暖使用 GPUPixel 白平衡的分段 Kelvin 映射，色调映射为 -100–100。单独设置对比原图不更改用户保存的参数。
+
+v0.4.1 美白修复：两版上游 `beauty_face_unit_filter.cc` 在 `whiten > 0` 时完整运行灰阶、基础、肤色 LUT，最后才 `mix(color, color_custom, whiten)`，造成 0 与极小正数不连续。改为 `mix(colorEPM, color_custom, clamp(whiten, 0, 1))`，其中 colorEPM 是已磨皮、未美白的颜色；强度现在控制完整美白链，强度 1 保持原上限。不增加绘制或 CPU/GPU 拷贝。
+
+Windows 的 ContinuousBeautyFilter 复用 SDK 滤镜组、LUT 纹理和参数接口，仅替换末端着色器并释放旧程序；着色器源和上游署名保存在 ContinuousBeautyShader.h。Android 在 CMake 中验证固定源码的两处匹配，生成构建目录副本并编译，下载的第三方源码不改动。两端以磨皮 0 / 0.7、七个美白强度进行 GPU 像素连续性检查，不能只用“滑块值变了”证明有效。
 
 ## 发布
 

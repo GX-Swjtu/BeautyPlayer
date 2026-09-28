@@ -29,6 +29,8 @@ Exact download hashes are recorded in `dependencies.lock.json`.
 
 Android v0.3.0 uses GPUPixel v1.3.1, commit `5a1b34ea74cf131088ee4f29946a16c667a83e26`, with the source, models, resources and ARM64 Mars library from that same commit. The Android EGL context and Qt pipeline adapter are provided in this repository. Windows continues to use beta3; its headers and libraries are not mixed with the Android SDK. Android download hashes are in `android-dependencies.lock.json`. The same closed-component redistribution boundary applies to Android.
 
+v0.4.1 adapts the MIT-licensed beauty shader to interpolate the entire whitening result continuously from zero. The Windows adaptation is in `src/ContinuousBeautyShader.h`; `cmake/AndroidGPUPixel.cmake` applies the equivalent change to a build-directory copy of the pinned Android source. Upstream copyright and license notices are retained.
+
 ## libyuv
 
 Pinned source commit `7320155784bdfefb69db8edddca37ecacf7e5198` from https://chromium.googlesource.com/libyuv/libyuv .

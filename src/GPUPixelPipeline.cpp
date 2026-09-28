@@ -12,6 +12,7 @@
 #include "face_detector.h"
 #include "util.h"
 #include "WhiteBalanceShader.h"
+#include "ContinuousBeautyShader.h"
 #include <QDir>
 #include <QFileInfo>
 #include <QElapsedTimer>
@@ -23,6 +24,21 @@
 using namespace gpupixel;
 
 namespace {
+class ContinuousBeautyFilter final : public BeautyFaceFilter {
+public:
+    static std::shared_ptr<ContinuousBeautyFilter> createCompatible() {
+        auto result = std::shared_ptr<ContinuousBeautyFilter>(new ContinuousBeautyFilter);
+        if (!result->init()) return {};
+        // Reuse the SDK's LUT textures, smoothing graph and parameter setters.
+        // initWithShaderString replaces the pointer without deleting it.
+        std::unique_ptr<GLProgram> previous(result->beautyFilter->getProgram());
+        if (!result->beautyFilter->initWithShaderString(kContinuousBeautyVertex, kContinuousBeautyFragment, 3)) return {};
+        GLint linked = GL_FALSE;
+        glGetProgramiv(result->beautyFilter->getProgram()->getID(), GL_LINK_STATUS, &linked);
+        if (!linked) throw std::runtime_error("Continuous whitening shader failed to link");
+        return result;
+    }
+};
 class DesktopWhiteBalanceFilter final : public WhiteBalanceFilter {
 public:
     static std::shared_ptr<DesktopWhiteBalanceFilter> createCompatible() {
@@ -150,7 +166,7 @@ bool GPUPixelPipeline::initialize(const QString &root, QString *error) {
         d->renderer = QString::fromLatin1(reinterpret_cast<const char *>(glGetString(GL_RENDERER)));
         glGetIntegerv(GL_MAX_TEXTURE_SIZE, &d->maxSize);
         d->source = SourceRawDataInput::create();
-        d->beauty = BeautyFaceFilter::create();
+        d->beauty = ContinuousBeautyFilter::createCompatible();
         d->balance = DesktopWhiteBalanceFilter::createCompatible();
         d->reshape = FaceReshapeFilter::create();
         d->lipstick = LipstickFilter::create();

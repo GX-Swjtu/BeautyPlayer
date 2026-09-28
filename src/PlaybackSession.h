@@ -24,6 +24,8 @@ public:
     Q_INVOKABLE void beginHold();
     Q_INVOKABLE void endHold();
     Q_INVOKABLE void togglePlayback();
+    Q_INVOKABLE void pauseForLibrary();
+    Q_INVOKABLE QUrl firstDroppedVideo(const QList<QUrl> &urls) const;
     Q_INVOKABLE void save();
 signals:
     void preferencesChanged();

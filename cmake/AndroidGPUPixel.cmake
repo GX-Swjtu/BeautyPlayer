@@ -12,6 +12,22 @@ file(GLOB GP_ANDROID_SOURCES CONFIGURE_DEPENDS
     "${GP_ANDROID_ROOT}/src/source/*.cc" "${GP_ANDROID_ROOT}/src/sink/*.cc"
     "${GP_ANDROID_ROOT}/src/utils/*.cc")
 list(REMOVE_ITEM GP_ANDROID_SOURCES "${GP_ANDROID_ROOT}/src/core/gpupixel_context.cc" "${GP_ANDROID_ROOT}/src/sink/sink_view.cc")
+# Upstream applies several LUTs at full strength for every whiten > 0. Scale
+# their complete result, preserving the original endpoint at 1 and smoothing.
+# Patch a build-directory copy so the version-locked download stays unchanged.
+set(BEAUTY_UNIT_SOURCE "${GP_ANDROID_ROOT}/src/filter/beauty_face_unit_filter.cc")
+file(READ "${BEAUTY_UNIT_SOURCE}" BEAUTY_UNIT_TEXT)
+set(WHITEN_OLD "color = mix(color, color_custom, whiten);")
+set(WHITEN_NEW "color = mix(colorEPM, color_custom, clamp(whiten, 0.0, 1.0));")
+string(REGEX MATCHALL "color = mix\\(color, color_custom, whiten\\)" WHITEN_MATCHES "${BEAUTY_UNIT_TEXT}")
+list(LENGTH WHITEN_MATCHES WHITEN_COUNT)
+if(NOT WHITEN_COUNT EQUAL 2)
+    message(FATAL_ERROR "GPUPixel whitening source changed; review the continuity fix")
+endif()
+string(REPLACE "${WHITEN_OLD}" "${WHITEN_NEW}" BEAUTY_UNIT_TEXT "${BEAUTY_UNIT_TEXT}")
+file(CONFIGURE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/beauty_face_unit_continuous.cc" CONTENT "${BEAUTY_UNIT_TEXT}" @ONLY)
+list(REMOVE_ITEM GP_ANDROID_SOURCES "${BEAUTY_UNIT_SOURCE}")
+list(APPEND GP_ANDROID_SOURCES "${CMAKE_CURRENT_BINARY_DIR}/beauty_face_unit_continuous.cc")
 add_library(gpupixel STATIC ${GP_ANDROID_SOURCES} src/android/GPUPixelEglContext.cpp)
 set_target_properties(gpupixel PROPERTIES POSITION_INDEPENDENT_CODE ON AUTOMOC OFF)
 target_include_directories(gpupixel PUBLIC "${GP_ANDROID_ROOT}/include" "${GP_ANDROID_ROOT}/src"

@@ -23,6 +23,7 @@ VideoLibrary::VideoLibrary(bool persistent, QObject *parent) : QAbstractListMode
         const auto defaults = QStringList{QStandardPaths::writableLocation(QStandardPaths::MoviesLocation),
             QStandardPaths::writableLocation(QStandardPaths::DownloadLocation)};
         m_roots = QSettings().value("library/roots", defaults).toStringList();
+        m_blockedFolders = QSettings().value("library/blockedFolders").toStringList();
         m_respectNoMedia = QSettings().value("library/respectNoMedia", true).toBool();
         m_twoColumns = QSettings().value("library/twoColumns", false).toBool();
         m_sortBy = QSettings().value("library/sortBy", "created").toString();
@@ -82,17 +83,47 @@ QHash<int, QByteArray> VideoLibrary::roleNames() const {
 }
 QVariantList VideoLibrary::folders() const {
     QMap<QString, int> counts;
-    for (const auto &e : m_entries) ++counts[e.folder];
+    int total = 0;
+    for (const auto &e : m_entries) if (!isFolderBlocked(e.folder)) { ++counts[e.folder]; ++total; }
     QVariantList result;
-    result.append(QVariantMap{{"name", QStringLiteral("全部视频")}, {"path", QString()}, {"count", m_entries.size()}});
+    result.append(QVariantMap{{"name", QStringLiteral("全部视频")}, {"path", QString()}, {"count", total}});
     for (auto i = counts.begin(); i != counts.end(); ++i)
         result.append(QVariantMap{{"name", QDir(i.key()).dirName()}, {"path", i.key()}, {"count", i.value()}});
     return result;
+}
+bool VideoLibrary::isFolderBlocked(const QString &path) const {
+#ifdef Q_OS_WIN
+    constexpr auto sensitivity = Qt::CaseInsensitive;
+#else
+    constexpr auto sensitivity = Qt::CaseSensitive;
+#endif
+    for (const auto &blocked : m_blockedFolders)
+        if (path.compare(blocked, sensitivity) == 0 || path.startsWith(blocked.endsWith('/') ? blocked : blocked + '/', sensitivity)) return true;
+    return false;
+}
+QVariantList VideoLibrary::folderOptions() const {
+    QMap<QString, int> counts;
+    for (const auto &entry : m_entries) ++counts[entry.folder];
+    for (const auto &path : m_blockedFolders) if (!counts.contains(path)) counts[path] = 0;
+    QVariantList result;
+    for (auto i = counts.cbegin(); i != counts.cend(); ++i)
+        result.append(QVariantMap{{"name", QDir(i.key()).dirName()}, {"path", i.key()}, {"count", i.value()},
+            {"blocked", isFolderBlocked(i.key())}, {"explicitBlock", m_blockedFolders.contains(i.key())}});
+    return result;
+}
+void VideoLibrary::setFolderBlocked(const QString &path, bool blocked) {
+    if (path.isEmpty()) return;
+    if (blocked) { if (!m_blockedFolders.contains(path)) m_blockedFolders.append(path); }
+    else m_blockedFolders.removeAll(path);
+    if (isFolderBlocked(m_folder)) { m_folder.clear(); emit filterChanged(); }
+    if (m_persistent) QSettings().setValue("library/blockedFolders", m_blockedFolders);
+    filter(); emit foldersChanged();
 }
 void VideoLibrary::filter() {
     beginResetModel(); m_visible.clear();
     for (int i = 0; i < m_entries.size(); ++i) {
         const auto &e = m_entries[i];
+        if (isFolderBlocked(e.folder)) continue;
         if ((m_folder.isEmpty() || e.folder == m_folder) && (m_search.isEmpty() || e.name.contains(m_search, Qt::CaseInsensitive))) m_visible.append(i);
     }
     QCollator collator; collator.setNumericMode(true); collator.setCaseSensitivity(Qt::CaseInsensitive);

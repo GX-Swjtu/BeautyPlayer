@@ -1,4 +1,5 @@
 #include "GPUPixelPipeline.h"
+#include "WhiteningChecks.h"
 #include <QGuiApplication>
 #include <QDir>
 #include <QJsonDocument>
@@ -39,6 +40,11 @@ int main(int argc, char **argv) {
     auto portrait = QImage(work.filePath(argc > 1 ? QString::fromLocal8Bit(argv[1]) : QStringLiteral("third_party/gpupixel/app/windows/demo.png")));
     if (portrait.isNull()) return 2;
     portrait.save(out + "original.png");
+    const auto whitening = whiteningChecks(pipeline, portrait, out + "continuity");
+    for (const auto &value : whitening) {
+        const auto row = value.toObject();
+        check(QString("whitening_continuity_s%1_w%2").arg(row["smoothing"].toDouble()).arg(row["strength"].toDouble()), row["passed"].toBool(), row["linearError"].toDouble());
+    }
     const char *names[] = {"smoothing", "whitening", "temperature", "tint", "slimming", "eyes", "lipstick", "blush"};
     for (int i = 0; i < BeautyParameters::Count; ++i) {
         BeautyParameters p; p.values[i] = 1;
@@ -59,7 +65,7 @@ int main(int argc, char **argv) {
     check("neutral_after_effects_no_stale_frame", difference(colors, reset.image) < .01, difference(colors, reset.image));
     QImage uhd = colors.scaled(3840,2160);
     auto full = pipeline.process(uhd, all); check("4k_preserved", full.image.size() == uhd.size());
-    QJsonObject report{{"renderer", pipeline.renderer()}, {"tests", results}, {"passed", ok}, {"4k_ms", full.milliseconds}};
+    QJsonObject report{{"renderer", pipeline.renderer()}, {"tests", results}, {"whitening", whitening}, {"passed", ok}, {"4k_ms", full.milliseconds}};
     QFile file(out + "results.json");
     if (!file.open(QIODevice::WriteOnly)) return 3;
     file.write(QJsonDocument(report).toJson());

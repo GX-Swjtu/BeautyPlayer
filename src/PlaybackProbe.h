@@ -42,5 +42,6 @@ private:
     QUrl m_source;
     qint64 m_audioPts = -1, m_previousCount = 0;
     qint64 m_previousElapsed = 0;
+    qint64 m_libraryPausePosition = 0;
     bool m_ok = true;
 };

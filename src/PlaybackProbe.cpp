@@ -1,4 +1,7 @@
 #include "PlaybackProbe.h"
+#include <QMimeData>
+#include <QDragEnterEvent>
+#include <QDropEvent>
 #include "BeautyVideoBridge.h"
 #include "PlaybackSession.h"
 #include "VideoLibrary.h"
@@ -299,6 +302,59 @@ void PlaybackProbe::tick() {
         case 34:
             if (m_window->isVisible()) clickItem("beautyDone");
             break;
+        case 35:
+            if (m_seconds < 44 || !m_window->isVisible()) break;
+            m_player->play(); m_window->setProperty("controlsVisible", true);
+            QTimer::singleShot(250, this, [this] {
+                m_session->beginHold();
+                check("return_to_library_pauses", clickItem("backToLibrary") && m_window->property("libraryOpen").toBool()
+                    && m_player->playbackState() == QMediaPlayer::PausedState && !m_session->holding());
+                m_libraryPausePosition = m_player->position();
+                QKeyEvent space(QEvent::KeyPress, Qt::Key_Space, Qt::NoModifier, " ");
+                QCoreApplication::sendEvent(m_window, &space);
+                QKeyEvent release(QEvent::KeyRelease, Qt::Key_Space, Qt::NoModifier, " ");
+                QCoreApplication::sendEvent(m_window, &release);
+                check("library_space_cannot_resume_background_playback", m_player->playbackState() == QMediaPlayer::PausedState);
+            });
+            break;
+        case 36:
+            if (m_seconds < 44 || !m_window->isVisible()) break;
+            check("library_position_stays_paused", std::abs(m_player->position() - m_libraryPausePosition) < 100);
+            m_window->setProperty("libraryOpen", false);
+            check("return_from_library_does_not_autoplay", m_player->playbackState() == QMediaPlayer::PausedState);
+            m_player->play();
+            break;
+#ifndef Q_OS_ANDROID
+        case 37:
+            if (m_seconds >= 44 && m_window->isVisible()) {
+                m_window->setProperty("controlsVisible", false);
+                for (const auto &point : {QPointF(40, 180), QPointF(45, m_window->height() - 35)}) {
+                    QMouseEvent move(QEvent::MouseMove, point, m_window->mapToGlobal(point.toPoint()), Qt::NoButton, Qt::NoButton, Qt::NoModifier);
+                    QCoreApplication::sendEvent(m_window, &move);
+                }
+                QTimer::singleShot(150, this, [this] { check("desktop_bottom_hover_reveals_controls", m_window->property("controlsVisible").toBool()); });
+            }
+            break;
+        case 40:
+            if (m_seconds >= 44 && m_window->isVisible()) check("desktop_mouse_idle_hides_controls", !m_window->property("controlsVisible").toBool());
+            break;
+        case 41:
+            if (m_seconds >= 44 && m_window->isVisible()) {
+                QMimeData data; data.setUrls({QUrl::fromLocalFile(QFileInfo(m_source.toLocalFile()).absolutePath()), m_source});
+                const QPoint point(80, 180);
+                QDragEnterEvent enter(point, Qt::CopyAction, &data, Qt::LeftButton, Qt::NoModifier);
+                QCoreApplication::sendEvent(m_window, &enter);
+                check("desktop_drag_accepts_video", enter.isAccepted());
+                QDropEvent drop(point, Qt::CopyAction, &data, Qt::LeftButton, Qt::NoModifier);
+                QCoreApplication::sendEvent(m_window, &drop);
+                check("desktop_drop_opens_video", drop.isAccepted() && m_player->source() == m_source && !m_window->property("libraryOpen").toBool());
+                QMimeData invalid; invalid.setUrls({QUrl::fromLocalFile(QFileInfo(m_source.toLocalFile()).absolutePath())});
+                QDragEnterEvent rejected(point, Qt::CopyAction, &invalid, Qt::LeftButton, Qt::NoModifier);
+                QCoreApplication::sendEvent(m_window, &rejected);
+                check("desktop_drag_rejects_directory", !rejected.isAccepted());
+            }
+            break;
+#endif
         default:
             if (m_tick > 30 && m_tick % 45 == 0) m_bridge->seek(m_player->duration() / 3);
             break;

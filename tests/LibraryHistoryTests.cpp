@@ -5,10 +5,48 @@
 #include <QtTest>
 #include <QTemporaryDir>
 #include <QFile>
+#include <QSettings>
 
 class LibraryHistoryTests : public QObject {
     Q_OBJECT
+    QTemporaryDir m_preferences;
 private slots:
+    void initTestCase() {
+        QCoreApplication::setOrganizationName("BeautyPlayerTests");
+        QCoreApplication::setApplicationName("IsolatedLibrarySettings");
+        QSettings::setDefaultFormat(QSettings::IniFormat);
+        QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, m_preferences.path());
+    }
+    void blockedFoldersStayExcludedAfterScanAndRestart() {
+        QTemporaryDir dir; QDir().mkpath(dir.filePath("private/child")); QDir().mkpath(dir.filePath("private2"));
+        for (const auto *name : {"public.mp4", "private/a.mp4", "private/child/b.mp4", "private2/c.mp4"}) {
+            QFile f(dir.filePath(name)); QVERIFY(f.open(QIODevice::WriteOnly)); f.write("fixture");
+        }
+        QSettings settings; settings.clear(); settings.setValue("library/roots", QStringList{dir.path()});
+        const auto hidden = QDir::fromNativeSeparators(dir.filePath("private"));
+        {
+            VideoLibrary library; QTRY_COMPARE_WITH_TIMEOUT(library.count(), 4, 10000);
+            library.setFolder(hidden); QCOMPARE(library.count(), 1);
+            library.setFolderBlocked(hidden, true); QCOMPARE(library.count(), 2); QVERIFY(library.folder().isEmpty());
+            QCOMPARE(library.folders().size(), 3); // All, root, private2; no prefix collision.
+            library.refresh(); QTRY_VERIFY_WITH_TIMEOUT(!library.scanning(), 10000); QCOMPARE(library.count(), 2);
+        }
+        {
+            VideoLibrary restored; QVERIFY(restored.isFolderBlocked(hidden));
+            QTRY_COMPARE_WITH_TIMEOUT(restored.count(), 2, 10000);
+            restored.setFolderBlocked(hidden, false); QCOMPARE(restored.count(), 4);
+            QVERIFY(!restored.isFolderBlocked(hidden));
+        }
+        settings.clear();
+    }
+    void presetMigrationKeepsCustomValues() {
+        QSettings s; s.clear(); s.setValue("beauty/presetVersion", 2);
+        s.setValue("beauty/temperature", -.04); s.setValue("beauty/tint", .025); s.setValue("beauty/whitening", .32);
+        { BeautySettings settings(true); QCOMPARE(settings.snapshot().values[2], 0.f); QCOMPARE(settings.snapshot().values[3], 0.f); QCOMPARE(settings.snapshot().values[1], .2f); }
+        s.setValue("beauty/presetVersion", 2); s.setValue("beauty/temperature", .13); s.setValue("beauty/tint", -.12);
+        { BeautySettings settings(true); QCOMPARE(settings.snapshot().values[2], .13f); QCOMPARE(settings.snapshot().values[3], -.12f); settings.reset(); QCOMPARE(settings.snapshot().values[2], 0.f); QCOMPARE(settings.snapshot().values[3], 0.f); }
+        s.clear();
+    }
     void noMediaPrunesDescendantsAndOverlappingRoots() {
         QTemporaryDir dir; QDir().mkpath(dir.filePath("hidden/child"));
         for (const auto *name : {"visible.mp4", "hidden/.nomedia", "hidden/private.mp4", "hidden/child/inside.mp4"}) {

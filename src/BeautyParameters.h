@@ -9,7 +9,7 @@ struct BeautyParameters {
     bool enabled = true;
     static BeautyParameters recommended() {
         BeautyParameters p;
-        p.values = {.70f, .32f, -.04f, .025f, 0, 0, 0, 0};
+        p.values = {.70f, .20f, 0, 0, 0, 0, 0, 0};
         return p;
     }
     bool active() const {
