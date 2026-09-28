@@ -27,6 +27,10 @@ BeautySettings::BeautySettings(bool persistent, QObject *parent) : QObject(paren
             if (std::abs(m_parameters.values[3] - .025f) < .0001f) m_parameters.values[3] = 0;
             if (std::abs(m_parameters.values[1] - .32f) < .0001f) m_parameters.values[1] = .20f;
         }
+        // Lower the previous recommended smoothing once, preserving other saved strengths.
+        if (s.value("beauty/presetVersion", 0).toInt() < 4 &&
+            std::abs(m_parameters.values[BeautyParameters::Smoothing] - .70f) < .0001f)
+            m_parameters.values[BeautyParameters::Smoothing] = BeautyParameters::recommended().values[BeautyParameters::Smoothing];
     }
 }
 BeautySettings::~BeautySettings() { save(); }
@@ -51,7 +55,7 @@ void BeautySettings::reset() { m_parameters = BeautyParameters::recommended(); e
 void BeautySettings::save() {
     if (!m_persistent) return;
     QSettings s;
-    s.setValue("beauty/presetVersion", 3);
+    s.setValue("beauty/presetVersion", 4);
     for (int i = 0; i < BeautyParameters::Count; ++i) s.setValue(QStringLiteral("beauty/") + key(i), m_parameters.values[i]);
     s.setValue("beauty/enabled", m_parameters.enabled);
 }

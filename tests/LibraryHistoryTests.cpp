@@ -84,10 +84,12 @@ private slots:
     }
     void presetMigrationKeepsCustomValues() {
         QSettings s; s.clear(); s.setValue("beauty/presetVersion", 2);
-        s.setValue("beauty/temperature", -.04); s.setValue("beauty/tint", .025); s.setValue("beauty/whitening", .32);
-        { BeautySettings settings(true); QCOMPARE(settings.snapshot().values[2], 0.f); QCOMPARE(settings.snapshot().values[3], 0.f); QCOMPARE(settings.snapshot().values[1], .2f); }
-        s.setValue("beauty/presetVersion", 2); s.setValue("beauty/temperature", .13); s.setValue("beauty/tint", -.12);
-        { BeautySettings settings(true); QCOMPARE(settings.snapshot().values[2], .13f); QCOMPARE(settings.snapshot().values[3], -.12f); settings.reset(); QCOMPARE(settings.snapshot().values[2], 0.f); QCOMPARE(settings.snapshot().values[3], 0.f); }
+        s.setValue("beauty/temperature", -.04); s.setValue("beauty/tint", .025); s.setValue("beauty/whitening", .32); s.setValue("beauty/smoothing", .70);
+        { BeautySettings settings(true); QCOMPARE(settings.snapshot().values[0], .2f); QCOMPARE(settings.snapshot().values[2], 0.f); QCOMPARE(settings.snapshot().values[3], 0.f); QCOMPARE(settings.snapshot().values[1], .2f); }
+        s.setValue("beauty/presetVersion", 3); s.setValue("beauty/smoothing", .45); s.setValue("beauty/temperature", .13); s.setValue("beauty/tint", -.12);
+        { BeautySettings settings(true); QCOMPARE(settings.snapshot().values[0], .45f); QCOMPARE(settings.snapshot().values[2], .13f); QCOMPARE(settings.snapshot().values[3], -.12f); settings.reset(); QCOMPARE(settings.snapshot().values[0], .2f); QCOMPARE(settings.snapshot().values[2], 0.f); QCOMPARE(settings.snapshot().values[3], 0.f); }
+        s.setValue("beauty/smoothing", .70);
+        { BeautySettings settings(true); QCOMPARE(settings.snapshot().values[0], .7f); } // A new explicit choice survives later launches.
         s.clear();
     }
     void noMediaPrunesDescendantsAndOverlappingRoots() {
@@ -160,7 +162,7 @@ private slots:
     void lightweightDefaults() {
         BeautySettings settings(false);
         QVERIFY(settings.snapshot().active()); QVERIFY(!settings.snapshot().needsFace());
-        QVERIFY(settings.snapshot().values[0] >= .6f);
+        QCOMPARE(settings.snapshot().values[0], .2f);
         settings.setValue("slimming", .8); QVERIFY(settings.snapshot().needsFace());
         settings.reset(); QVERIFY(!settings.snapshot().needsFace());
     }
