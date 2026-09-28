@@ -1,0 +1,36 @@
+{
+  "commit": "9069057a529d3130f518e54d68fbe86af62239c1",
+  "files": [
+    {
+      "path": "third_party/gpupixel_windows_x86_64.zip",
+      "sha256": "E58AC5AC8A3238F2AD46B1CCC7929850DDCF61D1671867122580F2E52B0D5082",
+      "url": "https://github.com/pixpark/gpupixel/releases/download/v1.3.0-beta3/gpupixel_windows_x86_64.zip"
+    },
+    {
+      "path": "third_party/upstream/src/third_party/glad/include/glad/glad.h",
+      "sha256": "9F998FA13A9DFAFF0F94C9C29413C812275A8A251E20480B0BBDEBEEF7EBCA34",
+      "url": "https://raw.githubusercontent.com/pixpark/gpupixel/9069057a529d3130f518e54d68fbe86af62239c1/src/third_party/glad/include/glad/glad.h"
+    },
+    {
+      "path": "third_party/upstream/src/third_party/glad/include/KHR/khrplatform.h",
+      "sha256": "7B1E01AAA7AD8F6FC34B5C7BDF79EBF5189BB09E2C4D2E79FC5D350623D11E83",
+      "url": "https://raw.githubusercontent.com/pixpark/gpupixel/9069057a529d3130f518e54d68fbe86af62239c1/src/third_party/glad/include/KHR/khrplatform.h"
+    },
+    {
+      "path": "third_party/upstream/src/third_party/glad/src/glad.c",
+      "sha256": "588B652E1E2B2E36A3F9FD4304D7DDBE52F407B35CC4B67E8610F225C2AC3282",
+      "url": "https://raw.githubusercontent.com/pixpark/gpupixel/9069057a529d3130f518e54d68fbe86af62239c1/src/third_party/glad/src/glad.c"
+    },
+    {
+      "path": "third_party/upstream/src/third_party/glfw/include/GLFW/glfw3.h",
+      "sha256": "0992A30F01EBAA41C32F3F0588E942961ABB8A9A52CA8764BD32EE4D7D71A46D",
+      "url": "https://raw.githubusercontent.com/pixpark/gpupixel/9069057a529d3130f518e54d68fbe86af62239c1/src/third_party/glfw/include/GLFW/glfw3.h"
+    },
+    {
+      "path": "third_party/upstream/LICENSE",
+      "sha256": "E67BACD6339097C9F551237FC25AE78D338C2D91C1490D6F4994F0527252F3E8",
+      "url": "https://raw.githubusercontent.com/pixpark/gpupixel/9069057a529d3130f518e54d68fbe86af62239c1/LICENSE"
+    }
+  ],
+  "version": "v1.3.0-beta3"
+}

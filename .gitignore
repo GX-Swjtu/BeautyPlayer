@@ -1,0 +1,10 @@
+/build/
+/dist/
+/third_party/
+/test-media/
+/artifacts/
+*.user
+*.log
+/.vs/
+/.idea/
+CMakeUserPresets.json
