@@ -33,7 +33,10 @@ ApplicationWindow {
         if (panelOpen) { panelOpen = false; close.accepted = false }
         else if (!libraryOpen) { libraryOpen = true; playbackSession.endHold(); close.accepted = false }
     }
-    onPanelOpenChanged: panelOpen ? beautyDrawer.open() : beautyDrawer.close()
+    onPanelOpenChanged: {
+        playbackSession.endHold()
+        if (!panelOpen) { bridge.compareOriginal = false; showControls() }
+    }
     Component.onCompleted: bridge.outputSink = videoOutput.videoSink
     Timer { id: hideTimer; interval: 4500; onTriggered: if (player.playbackState === MediaPlayer.PlayingState && !root.panelOpen && !root.libraryOpen && !seekBar.pressed) root.controlsVisible = false }
     Connections {
@@ -67,7 +70,12 @@ ApplicationWindow {
         onAccepted: bridge.open(urlInput.text)
     }
 
-    VideoOutput { id: videoOutput; anchors.fill: parent; fillMode: VideoOutput.PreserveAspectFit }
+    VideoOutput {
+        id: videoOutput; objectName: "videoOutput"; anchors.fill: parent
+        // Keep the whole frame visible while tuning, including portrait video.
+        anchors.bottomMargin: root.panelOpen && !root.libraryOpen ? beautyPanel.height : 0
+        fillMode: VideoOutput.PreserveAspectFit
+    }
     MouseArea {
         id: gestures; objectName: "videoGestures"; anchors.fill: parent
         enabled: !root.libraryOpen && !root.panelOpen
@@ -106,7 +114,7 @@ ApplicationWindow {
     }
     Rectangle {
         anchors.top: parent.top; width: parent.width; height: 96
-        visible: root.controlsVisible && !root.libraryOpen
+        visible: root.controlsVisible && !root.libraryOpen && !root.panelOpen
         gradient: Gradient { GradientStop { position: 0; color: "#db0b1115" } GradientStop { position: 1; color: "#000b1115" } }
         RowLayout {
             anchors.fill: parent; anchors.margins: 14; anchors.bottomMargin: 26; spacing: 8
@@ -123,8 +131,9 @@ ApplicationWindow {
         MenuItem { text: player.loops === MediaPlayer.Infinite ? "关闭循环" : "循环播放"; onTriggered: player.loops = player.loops === MediaPlayer.Infinite ? 1 : MediaPlayer.Infinite }
     }
     Rectangle {
+        objectName: "playbackControls"
         anchors.bottom: parent.bottom; width: parent.width; height: root.compact ? 188 : 164
-        visible: root.controlsVisible && !root.libraryOpen
+        visible: root.controlsVisible && !root.libraryOpen && !root.panelOpen
         gradient: Gradient { GradientStop { position: 0; color: "#000b1115" } GradientStop { position: .36; color: "#d80b1115" } GradientStop { position: 1; color: "#f70b1115" } }
         ColumnLayout {
             anchors.fill: parent; anchors.leftMargin: root.compact ? 16 : 32; anchors.rightMargin: root.compact ? 16 : 32; anchors.topMargin: 25; anchors.bottomMargin: 14; spacing: 0
@@ -140,7 +149,7 @@ ApplicationWindow {
             }
             RowLayout {
                 spacing: root.compact ? 2 : 16; Layout.fillWidth: true
-                ToolButton { text: "美颜"; implicitWidth: 60; implicitHeight: 52; onClicked: root.panelOpen = true }
+                ToolButton { objectName: "beautyEntry"; text: "美颜"; implicitWidth: 60; implicitHeight: 52; onClicked: root.panelOpen = true }
                 ToolButton { text: player.playbackRate.toFixed(1) + "×"; implicitWidth: 56; implicitHeight: 52; onClicked: optionsDialog.open() }
                 Item { Layout.fillWidth: true }
                 ToolButton { text: "−10"; implicitWidth: 48; implicitHeight: 52; onClicked: { bridge.seek(player.position - 10000); root.showControls() } }
@@ -159,7 +168,7 @@ ApplicationWindow {
     }
     Label {
         id: toast; anchors.horizontalCenter: parent.horizontalCenter; anchors.top: parent.top; anchors.topMargin: 90; padding: 14
-        visible: toastTimer.running && !root.libraryOpen; color: "#c6f6e6"
+        visible: toastTimer.running && !root.libraryOpen && !root.panelOpen; color: "#c6f6e6"
         background: Rectangle { radius: 14; color: "#e022302c" }
     }
     Timer { id: toastTimer; interval: 3500 }
@@ -251,68 +260,13 @@ ApplicationWindow {
             }
         }
     }
-    Drawer {
-        id: beautyDrawer; edge: Qt.BottomEdge; width: root.width; height: Math.min(root.height * .83, 650)
-        Overlay.modal: Rectangle { color: "#99060d0a" }
-        modal: true; interactive: true; onClosed: { root.panelOpen = false; root.showControls(); bridge.compareOriginal = false }
-        background: Rectangle { color: "#192428"; radius: 24 }
-        ColumnLayout {
-            anchors.fill: parent; anchors.margins: root.compact ? 18 : 28; spacing: 6
-            Rectangle { Layout.alignment: Qt.AlignHCenter; width: 40; height: 4; radius: 2; color: "#4f665c" }
-            RowLayout {
-                Label { text: "自然好看"; font.pixelSize: 23; font.bold: true; Layout.fillWidth: true }
-                Switch { text: "美颜"; checked: beautySettings.enabled; onToggled: beautySettings.enabled = checked }
-                ToolButton { text: "完成"; implicitHeight: 48; onClicked: root.panelOpen = false }
-            }
-            TabBar {
-                id: beautyTabs; Layout.fillWidth: true
-                TabButton { text: "肤质与色彩"; implicitHeight: 48 }
-                TabButton { text: "五官与美妆"; implicitHeight: 48 }
-            }
-            Label { text: beautyTabs.currentIndex === 0 ? "已为你调好 · 冷暖与色调作用于全画面" : "按需开启 · 关闭时不进行人脸检测"; color: "#94ada1"; font.pixelSize: 12; topPadding: 6; bottomPadding: 4 }
-            ScrollView {
-                Layout.fillWidth: true; Layout.fillHeight: true; clip: true; contentWidth: availableWidth
-                GridLayout {
-                    width: parent.width; columns: root.compact ? 1 : 2; columnSpacing: 28; rowSpacing: 4
-                    Repeater {
-                        model: beautyTabs.currentIndex === 0 ? [
-                            {key:"smoothing",name:"磨皮",negative:false,heavy:false}, {key:"whitening",name:"美白",negative:false,heavy:false},
-                            {key:"temperature",name:"冷暖",negative:true,heavy:false}, {key:"tint",name:"色调 · 绿 / 红",negative:true,heavy:false}
-                        ] : [
-                            {key:"slimming",name:"瘦脸",negative:false,heavy:true}, {key:"eyes",name:"大眼",negative:false,heavy:true},
-                            {key:"lipstick",name:"口红",negative:false,heavy:true}, {key:"blush",name:"腮红",negative:false,heavy:true}
-                        ]
-                        delegate: ColumnLayout {
-                            required property var modelData
-                            Layout.fillWidth: true; spacing: 0
-                            RowLayout {
-                                Layout.fillWidth: true; Layout.preferredHeight: 42
-                                Label { text: modelData.name; Layout.fillWidth: true; font.pixelSize: 14 }
-                                Label { text: Math.round(beautySettings.values[modelData.key] * 100); color: "#aac8ba" }
-                                Switch { visible: modelData.heavy; checked: beautySettings.values[modelData.key] > 0; enabled: beautySettings.enabled; onToggled: beautySettings.setValue(modelData.key, checked ? .4 : 0) }
-                            }
-                            Slider {
-                                objectName: modelData.key + "Slider"; Layout.fillWidth: true; implicitHeight: 44
-                                from: modelData.negative ? -1 : 0; to: 1; stepSize: .01; value: beautySettings.values[modelData.key]
-                                enabled: beautySettings.enabled && (!modelData.heavy || value > 0)
-                                onMoved: beautySettings.setValue(modelData.key, value)
-                            }
-                        }
-                    }
-                }
-            }
-            RowLayout {
-                Layout.fillWidth: true
-                Button { text: "恢复推荐"; flat: true; implicitHeight: 50; onClicked: beautySettings.reset() }
-                Button {
-                    text: "按住看原图"; Layout.fillWidth: true; implicitHeight: 50
-                    onPressed: bridge.compareOriginal = true
-                    onReleased: bridge.compareOriginal = false
-                    onCanceled: bridge.compareOriginal = false
-                }
-            }
-            Label { text: bridge.status; color: "#88a99b"; font.pixelSize: 11; Layout.fillWidth: true; elide: Text.ElideRight }
-        }
+    BeautyPanel {
+        id: beautyPanel; objectName: "beautyPanel"
+        anchors.bottom: parent.bottom; width: parent.width; height: implicitHeight
+        visible: root.panelOpen && !root.libraryOpen
+        dense: root.height < 480
+        settings: beautySettings; videoBridge: bridge
+        onCloseRequested: root.panelOpen = false
     }
     Dialog {
         id: optionsDialog; anchors.centerIn: parent; title: "播放设置"; width: Math.min(460, root.width - 24); modal: true; standardButtons: Dialog.Close

@@ -34,7 +34,7 @@ int main(int argc, char **argv) {
     QGuiApplication app(argc, argv);
     QCoreApplication::setOrganizationName("BeautyPlayer");
     QCoreApplication::setApplicationName("BeautyPlayer");
-    QCoreApplication::setApplicationVersion("0.3.0");
+    QCoreApplication::setApplicationVersion("0.3.1");
     QQuickStyle::setStyle("Material");
     QCommandLineParser parser; parser.addHelpOption(); parser.addVersionOption();
     parser.addPositionalArgument("video", "Local video or HTTP(S) URL");

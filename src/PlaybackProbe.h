@@ -23,6 +23,8 @@ private:
     void tick();
     void check(const QString &name, bool passed);
     void applyEffects();
+    bool clickItem(const QString &name, qreal horizontal = .5);
+    void checkBeautyLayout(const QString &captureName);
     QMediaPlayer *m_player;
     BeautySettings *m_settings;
     BeautyVideoBridge *m_bridge;

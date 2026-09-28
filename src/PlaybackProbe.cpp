@@ -57,6 +57,33 @@ void PlaybackProbe::applyEffects() {
 void PlaybackProbe::check(const QString &name, bool passed) {
     m_checks.append(QJsonObject{{"name", name}, {"passed", passed}}); m_ok &= passed;
 }
+bool PlaybackProbe::clickItem(const QString &name, qreal horizontal) {
+    auto *item = findVisualItem(m_window->contentItem(), name);
+    if (!item || !item->isVisible() || !item->isEnabled()) return false;
+    const auto point = item->mapToScene(QPointF(item->width() * horizontal, item->height() * .5));
+    if (!QRectF(0, 0, m_window->width(), m_window->height()).contains(point)) return false;
+    const auto global = m_window->mapToGlobal(point.toPoint());
+    QMouseEvent press(QEvent::MouseButtonPress, point, global, Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+    QCoreApplication::sendEvent(m_window, &press);
+    QMouseEvent release(QEvent::MouseButtonRelease, point, global, Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+    QCoreApplication::sendEvent(m_window, &release);
+    return true;
+}
+void PlaybackProbe::checkBeautyLayout(const QString &captureName) {
+    auto *panel = findVisualItem(m_window->contentItem(), "beautyPanel");
+    auto *video = findVisualItem(m_window->contentItem(), "videoOutput");
+    auto *controls = findVisualItem(m_window->contentItem(), "playbackControls");
+    check(captureName + "_compact", panel && panel->isVisible() && panel->height() <= 172);
+    check(captureName + "_preview_uncovered", panel && video &&
+        video->mapToScene(QPointF(0, video->height())).y() <= panel->mapToScene(QPointF()).y());
+    check(captureName + "_playback_controls_hidden", controls && !controls->isVisible());
+    auto *options = findVisualItem(m_window->contentItem(), "beautyOptions");
+    const auto index = panel ? panel->property("selectedIndex").toInt() : 0;
+    auto *selected = findVisualItem(m_window->contentItem(), QString::fromLatin1(BeautySettings::key(index)) + "Option");
+    const auto point = selected && options ? selected->mapToItem(options, QPointF(selected->width() / 2, 0)) : QPointF(-1, 0);
+    check(captureName + "_selected_option_visible", options && point.x() >= 0 && point.x() <= options->width());
+    saveImageAsync(m_window->grabWindow(), m_report + "-" + captureName + ".png");
+}
 void PlaybackProbe::tick() {
     ++m_tick;
     auto metrics = m_bridge->metrics();
@@ -117,31 +144,76 @@ void PlaybackProbe::tick() {
         case 11: m_bridge->seek(500); break;
         case 12: if (m_window->isVisible()) m_window->showFullScreen(); break;
         case 13: if (m_window->isVisible()) { check("fullscreen", m_window->visibility() == QWindow::FullScreen); m_window->showNormal(); } break;
-        case 14: m_window->setProperty("panelOpen", false); break;
+        case 14:
+            m_window->setProperty("panelOpen", false);
+            if (m_window->isVisible() && !m_window->property("controlsVisible").toBool()) clickItem("videoGestures");
+            break;
         case 15: {
-            m_window->setProperty("panelOpen", true);
             if (m_window->isVisible()) {
-                // Showing the panel schedules a layout polish. Wait for it before
-                // targeting actual window coordinates; delegates have visual parents.
+                check("beauty_entry_opens_panel", clickItem("beautyEntry") && m_window->property("panelOpen").toBool());
                 QTimer::singleShot(150, this, [this] {
-                auto *slider = findVisualItem(m_window->contentItem(), "smoothingSlider");
-                if (slider) {
+                    if (!m_settings->enabled()) clickItem("beautyMasterToggle");
                     const auto before = m_settings->snapshot().values[0];
-                    const auto point = slider->mapToScene(QPointF(slider->width() * .85, slider->height() * .5));
-                    const auto global = m_window->mapToGlobal(point.toPoint());
-                    QMouseEvent press(QEvent::MouseButtonPress, point, global, Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
-                    QCoreApplication::sendEvent(m_window, &press);
-                    QMouseEvent release(QEvent::MouseButtonRelease, point, global, Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
-                    QCoreApplication::sendEvent(m_window, &release);
-                    check("qml_slider_mouse_input", std::abs(m_settings->snapshot().values[0] - before) > .05);
-                } else check("qml_slider_mouse_input", false);
+                    check("qml_slider_mouse_input", clickItem("beautyAdjustmentSlider", .85) &&
+                        std::abs(m_settings->snapshot().values[0] - before) > .05);
+                    checkBeautyLayout("beauty-panel");
                 });
             }
             break;
         }
-        case 16: m_player->setPlaybackRate(1.5); break;
-        case 18: m_player->setPlaybackRate(1); break;
+        case 16: {
+            m_player->setPlaybackRate(1.5);
+            if (!m_window->isVisible()) break;
+            const auto smoothing = m_settings->snapshot().values[0];
+            const auto whitening = m_settings->snapshot().values[1];
+            check("beauty_select_whitening", clickItem("whiteningOption"));
+            clickItem("beautyAdjustmentSlider", .9);
+            check("shared_slider_updates_selected_effect", m_settings->snapshot().values[0] == smoothing &&
+                std::abs(m_settings->snapshot().values[1] - whitening) > .05);
+            break;
+        }
+        case 17:
+            if (m_window->isVisible()) {
+                clickItem("temperatureOption"); clickItem("beautyAdjustmentSlider", .1);
+                check("shared_slider_supports_negative_values", m_settings->snapshot().values[2] < -.5);
+                // Reset while the shared slider is bound to a signed parameter.
+                clickItem("beautyReset");
+                check("beauty_reset_recommended", m_settings->snapshot().values == BeautyParameters::recommended().values);
+                auto *options = findVisualItem(m_window->contentItem(), "beautyOptions");
+                if (options) options->setProperty("contentX", std::max(0., options->property("contentWidth").toDouble() - options->width()));
+            }
+            break;
+        case 18:
+            m_player->setPlaybackRate(1);
+            if (m_window->isVisible()) {
+                clickItem("lipstickOption");
+                check("selecting_makeup_does_not_enable_it", m_settings->snapshot().values[6] == 0);
+                check("makeup_switch_enables_effect", clickItem("beautyEffectToggle") && m_settings->snapshot().values[6] > 0);
+                QTimer::singleShot(150, this, [this] {
+                    checkBeautyLayout("beauty-makeup");
+                    auto *compare = findVisualItem(m_window->contentItem(), "beautyCompare");
+                    if (!compare) { check("beauty_compare_hold", false); return; }
+                    const auto point = compare->mapToScene(QPointF(compare->width() / 2, compare->height() / 2));
+                    const auto global = m_window->mapToGlobal(point.toPoint());
+                    QMouseEvent press(QEvent::MouseButtonPress, point, global, Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+                    QCoreApplication::sendEvent(m_window, &press);
+                    check("beauty_compare_hold", m_bridge->compareOriginal());
+                    QMouseEvent release(QEvent::MouseButtonRelease, point, global, Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+                    QCoreApplication::sendEvent(m_window, &release);
+                    check("beauty_compare_release", !m_bridge->compareOriginal());
+                });
+            }
+            break;
         case 19: m_bridge->open(m_source); break;
+        case 20:
+            if (m_window->isVisible()) {
+                check("makeup_switch_disables_effect", clickItem("beautyEffectToggle") && m_settings->snapshot().values[6] == 0);
+                check("beauty_master_off", clickItem("beautyMasterToggle") && !m_settings->enabled());
+                check("beauty_master_on", clickItem("beautyMasterToggle") && m_settings->enabled());
+                check("beauty_done_closes_panel", clickItem("beautyDone") && !m_window->property("panelOpen").toBool());
+            }
+            applyEffects();
+            break;
         case 21: {
             const auto other = QFileInfo(m_source.toLocalFile()).dir().filePath("sync-1080.mp4");
             if (QFileInfo::exists(other)) m_bridge->open(QUrl::fromLocalFile(other));
@@ -202,6 +274,30 @@ void PlaybackProbe::tick() {
             break;
         case 30:
             if (m_window->isVisible()) saveImageAsync(m_window->grabWindow(), m_report + "-phone-library.png");
+            break;
+        case 31:
+            if (m_window->isVisible()) {
+                m_window->setProperty("libraryOpen", false);
+                m_window->setProperty("panelOpen", true);
+                QTimer::singleShot(150, this, [this] { checkBeautyLayout("beauty-phone"); });
+            }
+            break;
+#ifndef Q_OS_ANDROID
+        case 32:
+            if (m_window->isVisible() && m_seconds >= 35) {
+                m_window->setMinimumHeight(360); m_window->resize(844, 390);
+                QTimer::singleShot(150, this, [this] { checkBeautyLayout("beauty-landscape"); });
+            }
+            break;
+        case 33:
+            if (m_window->isVisible() && m_seconds >= 35) {
+                m_window->resize(360, 480);
+                QTimer::singleShot(150, this, [this] { checkBeautyLayout("beauty-small"); });
+            }
+            break;
+#endif
+        case 34:
+            if (m_window->isVisible()) clickItem("beautyDone");
             break;
         default:
             if (m_tick > 30 && m_tick % 45 == 0) m_bridge->seek(m_player->duration() / 3);
