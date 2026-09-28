@@ -8,6 +8,7 @@
 #include <QQuickStyle>
 #include <QDir>
 #include <QIcon>
+#include <QFontDatabase>
 #include <QStandardPaths>
 #include "ThumbnailProvider.h"
 #include "LibraryProbe.h"
@@ -38,9 +39,19 @@ int main(int argc, char **argv) {
     QGuiApplication app(argc, argv);
     QCoreApplication::setOrganizationName("BeautyPlayer");
     QCoreApplication::setApplicationName("BeautyPlayer");
-    QCoreApplication::setApplicationVersion("0.4.1");
+    QCoreApplication::setApplicationVersion("0.4.2");
     QGuiApplication::setWindowIcon(QIcon(":/branding/mark.png"));
     QQuickStyle::setStyle("Material");
+#ifdef Q_OS_ANDROID
+    // Some OEM fallback lists select a Japanese Han font (e.g. MiSans Japanese
+    // VF), whose U+590D is visibly narrower. The UI is Simplified Chinese:
+    // prefer an installed SC family for Han, retaining the system Latin font.
+    const auto installedFonts = QFontDatabase::families();
+    QStringList hanFonts;
+    for (const auto *family : {"Noto Sans CJK SC", "Noto Sans SC", "MiSans VF", "Droid Sans Fallback"})
+        if (installedFonts.contains(QString::fromLatin1(family))) hanFonts.append(QString::fromLatin1(family));
+    if (!hanFonts.isEmpty()) QFontDatabase::setApplicationFallbackFontFamilies(QChar::Script_Han, hanFonts);
+#endif
     QCommandLineParser parser; parser.addHelpOption(); parser.addVersionOption();
     parser.addPositionalArgument("video", "Local video or HTTP(S) URL");
     parser.addOption({"fresh", "Do not read or write saved beauty settings"});

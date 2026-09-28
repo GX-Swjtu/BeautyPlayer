@@ -39,6 +39,49 @@ private slots:
         }
         settings.clear();
     }
+    void blockedFolderPathsUseTheSameIdentity() {
+        QTemporaryDir dir; QDir().mkpath(dir.filePath("private/child")); QDir().mkpath(dir.filePath("private2"));
+        for (const auto *name : {"public.mp4", "private/a.mp4", "private/child/b.mp4", "private2/c.mp4"}) {
+            QFile f(dir.filePath(name)); QVERIFY(f.open(QIODevice::WriteOnly)); f.write("fixture");
+        }
+        QSettings settings; settings.clear(); settings.setValue("library/roots", QStringList{dir.path()});
+        const auto hidden = QDir::fromNativeSeparators(dir.filePath("private"));
+        const auto alias = QDir::toNativeSeparators(hidden + "/./");
+        {
+            VideoLibrary library; QTRY_COMPARE_WITH_TIMEOUT(library.count(), 4, 10000);
+            QSignalSpy shortcutsChanged(&library, &VideoLibrary::foldersChanged);
+            library.setFolder(hidden); library.setFolderBlocked(alias, true);
+            QCOMPARE(library.count(), 2); QVERIFY(library.folder().isEmpty());
+            QVERIFY(!shortcutsChanged.isEmpty());
+            for (const auto &value : library.folders()) {
+                const auto item = value.toMap();
+                QVERIFY(!item["path"].toString().startsWith(hidden + '/'));
+                QVERIFY(item["path"].toString() != hidden);
+                if (item["path"].toString().isEmpty()) QCOMPARE(item["count"].toInt(), 2);
+            }
+            library.setFolder(hidden); QVERIFY(library.folder().isEmpty()); QCOMPARE(library.count(), 2);
+            library.refresh(); QTRY_VERIFY_WITH_TIMEOUT(!library.scanning(), 10000);
+            QCOMPARE(library.count(), 2); QCOMPARE(library.folders().size(), 3);
+        }
+        // Settings written by older versions may contain native separators or a trailing slash.
+        settings.setValue("library/blockedFolders", QStringList{alias});
+        {
+            VideoLibrary restored; QTRY_COMPARE_WITH_TIMEOUT(restored.count(), 2, 10000);
+            bool canRestore = false;
+            for (const auto &value : restored.folderOptions()) {
+                const auto item = value.toMap();
+                if (item["path"].toString() == hidden) canRestore = item["explicitBlock"].toBool();
+            }
+            QVERIFY(canRestore);
+#ifdef Q_OS_WIN
+            restored.setFolderBlocked(hidden.toUpper(), false);
+#else
+            restored.setFolderBlocked(hidden, false);
+#endif
+            QCOMPARE(restored.count(), 4); QCOMPARE(restored.folders().size(), 5);
+        }
+        settings.clear();
+    }
     void presetMigrationKeepsCustomValues() {
         QSettings s; s.clear(); s.setValue("beauty/presetVersion", 2);
         s.setValue("beauty/temperature", -.04); s.setValue("beauty/tint", .025); s.setValue("beauty/whitening", .32);

@@ -231,10 +231,13 @@ ApplicationWindow {
             }
             TextField { Layout.fillWidth: true; placeholderText: "搜索视频"; implicitHeight: 50; text: videoLibrary.search; onTextEdited: videoLibrary.search = text; selectByMouse: true }
             ListView {
+                objectName: "folderShortcuts"
                 Layout.fillWidth: true; Layout.preferredHeight: 48; orientation: ListView.Horizontal; spacing: 8; clip: true
                 model: videoLibrary.folders
                 delegate: Button {
                     required property var modelData
+                    objectName: "folderShortcut"
+                    readonly property string folderPath: modelData.path
                     text: modelData.name + "  " + modelData.count; highlighted: videoLibrary.folder === modelData.path
                     Material.foreground: highlighted ? "#10372a" : "#dcebe4"
                     contentItem: Text { text: parent.text; font: parent.font; color: parent.highlighted ? "#10372a" : "#dcebe4"; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }

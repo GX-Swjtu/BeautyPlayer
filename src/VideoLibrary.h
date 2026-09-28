@@ -4,6 +4,7 @@
 #include <QUrl>
 #include <QVariantList>
 #include <QTimer>
+#include <QMap>
 #include <atomic>
 #include <memory>
 
@@ -77,6 +78,7 @@ private:
     QStringList m_roots, m_blockedFolders;
     QString m_folder, m_search, m_status;
     QVector<VideoEntry> m_entries;
+    QMap<QString, int> m_folderCounts; // Built alongside the list from the same unblocked entries.
     QVector<int> m_visible;
     QFutureWatcher<QVector<VideoEntry>> m_watcher;
     std::shared_ptr<std::atomic_bool> m_cancel;
