@@ -55,6 +55,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/prepare-test-media.p
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify.ps1
 # 10 分钟连续播放与跳转测试
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify.ps1 -LongRun
+# 依次测试默认/全部特效/原图 4K 与音画同步，避免多个播放器争用 GPU
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/benchmark.ps1
 ```
 
 单独诊断：

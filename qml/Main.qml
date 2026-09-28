@@ -179,6 +179,7 @@ ApplicationWindow {
                     required property var modelData
                     text: modelData.name + "  " + modelData.count; highlighted: videoLibrary.folder === modelData.path
                     Material.foreground: highlighted ? "#10372a" : "#dcebe4"
+                    contentItem: Text { text: parent.text; font: parent.font; color: parent.highlighted ? "#10372a" : "#dcebe4"; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
                     onClicked: videoLibrary.folder = modelData.path
                     ToolTip.visible: hovered; ToolTip.text: modelData.path || "全部视频"
                 }
@@ -214,7 +215,10 @@ ApplicationWindow {
                     anchors.centerIn: parent; width: parent.width; spacing: 16; visible: videoLibrary.count === 0
                     Label { anchors.horizontalCenter: parent.horizontalCenter; text: videoLibrary.scanning ? "正在寻找视频" : "把喜欢的视频放进来"; font.pixelSize: 21; color: "#d0e3da" }
                     Label { width: parent.width; horizontalAlignment: Text.AlignHCenter; text: "自动查找“视频”和“下载”文件夹\n也可以添加自己的目录"; color: "#839d91"; lineHeight: 1.5; wrapMode: Text.Wrap }
-                    Button { anchors.horizontalCenter: parent.horizontalCenter; text: "添加文件夹"; highlighted: true; Material.foreground: "#10372a"; onClicked: folderDialog.open() }
+                    Button {
+                        anchors.horizontalCenter: parent.horizontalCenter; text: "添加文件夹"; highlighted: true; onClicked: folderDialog.open()
+                        contentItem: Text { text: parent.text; font: parent.font; color: "#10372a"; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                    }
                 }
             }
             Label { text: videoLibrary.status; Layout.fillWidth: true; elide: Text.ElideRight; color: "#708c80"; font.pixelSize: 11 }

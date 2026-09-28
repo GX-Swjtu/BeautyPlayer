@@ -9,6 +9,7 @@ Git contains source, notices and reproducible dependency download instructions o
 Qt 6.11.2 MSVC x64, using Core, Gui, Qml, Quick, Quick Controls 2, Network and Multimedia.
 Qt is dynamically linked. Open-source license texts are included in `licenses/LGPL-3.0.txt` and `licenses/GPL-3.0.txt`.
 Users may replace the dynamically linked Qt libraries with compatible modified versions, debug such modifications and rebuild the application from this repository. No additional EULA restricts those rights.
+Packaging excludes unused Qt Virtual Keyboard, Lottie vector-image plugins and QML/Quick3D profiling plugins. These optional modules are not required by this player and must not be accidentally introduced by windeployqt's default plugin expansion. Each package starts from a clean directory, preserving the previous package under ignored local artifacts.
 Sources and applicable module licenses: https://code.qt.io/ ; https://download.qt.io/archive/qt/6.11/6.11.2/ .
 Qt-provided FFmpeg binaries and plugins are deployed by Qt's windeployqt; source: https://ffmpeg.org/ and the matching Qt distribution.
 The deployed avcodec-61.dll reports "LGPL version 2.1 or later" via avcodec_license(); text included in `licenses/FFmpeg-LGPL-2.1.txt`.
