@@ -11,11 +11,12 @@ import QtMultimedia
 
 ApplicationWindow {
     id: root
-    width: 1120; height: 760; minimumWidth: 360; minimumHeight: 480
+    width: 1120; height: 760; minimumWidth: android ? 0 : 360; minimumHeight: android ? 0 : 480
     visible: true; title: "映颜 · BeautyPlayer"; color: "#0c1013"
     Material.theme: Material.Dark
     Material.accent: "#9ce6ce"; Material.primary: "#151d22"
     property bool compact: width < 640
+    readonly property bool android: Qt.platform.os === "android"
     property bool panelOpen: false
     property bool libraryOpen: true
     property bool controlsVisible: true
@@ -27,12 +28,18 @@ ApplicationWindow {
         return (s >= 3600 ? Math.floor(s / 3600) + ":" : "") + Math.floor(s / 60 % 60).toString().padStart(2,"0") + ":" + (s % 60).toString().padStart(2,"0")
     }
     function showControls() { controlsVisible = true; hideTimer.restart() }
+    onClosing: close => {
+        if (!android) return
+        if (panelOpen) { panelOpen = false; close.accepted = false }
+        else if (!libraryOpen) { libraryOpen = true; playbackSession.endHold(); close.accepted = false }
+    }
     onPanelOpenChanged: panelOpen ? beautyDrawer.open() : beautyDrawer.close()
     Component.onCompleted: bridge.outputSink = videoOutput.videoSink
     Timer { id: hideTimer; interval: 4500; onTriggered: if (player.playbackState === MediaPlayer.PlayingState && !root.panelOpen && !root.libraryOpen && !seekBar.pressed) root.controlsVisible = false }
     Connections {
         target: bridge
         function onSourceOpened() { root.libraryOpen = false; root.showControls(); root.errorText = "" }
+        function onMediaOpenFailed(message) { root.libraryOpen = false; root.errorText = message; root.showControls() }
     }
     Connections {
         target: player
@@ -206,7 +213,7 @@ ApplicationWindow {
                         ColumnLayout {
                             Layout.fillWidth: true; spacing: 6
                             Label { text: videoName; Layout.fillWidth: true; elide: Text.ElideMiddle; color: "#e0ede8"; font.pixelSize: 15 }
-                            Label { text: sizeMB.toFixed(1) + " MB  ·  " + folderPath; Layout.fillWidth: true; elide: Text.ElideLeft; font.pixelSize: 11; color: "#8fa69d" }
+                            Label { text: sizeMB.toFixed(1) + " MB  ·  " + (root.android ? folderPath.split("/").pop() : folderPath); Layout.fillWidth: true; elide: Text.ElideLeft; font.pixelSize: 11; color: "#8fa69d" }
                         }
                     }
                     onClicked: bridge.open(mediaUrl)
@@ -214,9 +221,9 @@ ApplicationWindow {
                 Column {
                     anchors.centerIn: parent; width: parent.width; spacing: 16; visible: videoLibrary.count === 0
                     Label { anchors.horizontalCenter: parent.horizontalCenter; text: videoLibrary.scanning ? "正在寻找视频" : "把喜欢的视频放进来"; font.pixelSize: 21; color: "#d0e3da" }
-                    Label { width: parent.width; horizontalAlignment: Text.AlignHCenter; text: "自动查找“视频”和“下载”文件夹\n也可以添加自己的目录"; color: "#839d91"; lineHeight: 1.5; wrapMode: Text.Wrap }
+                    Label { width: parent.width; horizontalAlignment: Text.AlignHCenter; text: root.android ? "授权后自动读取手机视频索引\n也可点右上角“文件”选择视频" : "自动查找“视频”和“下载”文件夹\n也可以添加自己的目录"; color: "#839d91"; lineHeight: 1.5; wrapMode: Text.Wrap }
                     Button {
-                        anchors.horizontalCenter: parent.horizontalCenter; text: "添加文件夹"; highlighted: true; onClicked: folderDialog.open()
+                        anchors.horizontalCenter: parent.horizontalCenter; text: root.android ? "授权视频访问" : "添加文件夹"; highlighted: true; onClicked: root.android ? videoLibrary.requestAccess() : folderDialog.open()
                         contentItem: Text { text: parent.text; font: parent.font; color: "#10372a"; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
                     }
                 }
@@ -227,8 +234,8 @@ ApplicationWindow {
     }
     Menu {
         id: libraryMenu
-        MenuItem { text: "添加文件夹"; onTriggered: folderDialog.open() }
-        MenuItem { text: "管理扫描目录"; onTriggered: foldersDialog.open() }
+        MenuItem { text: root.android ? "授权 / 重新选择视频" : "添加文件夹"; onTriggered: root.android ? videoLibrary.requestAccess() : folderDialog.open() }
+        MenuItem { text: "管理扫描目录"; visible: !root.android; height: visible ? implicitHeight : 0; onTriggered: foldersDialog.open() }
         MenuItem { text: "播放网址"; onTriggered: urlDialog.open() }
         MenuItem { text: "播放设置"; onTriggered: optionsDialog.open() }
     }

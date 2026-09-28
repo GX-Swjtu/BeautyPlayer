@@ -3,6 +3,7 @@
 #include <QFutureWatcher>
 #include <QUrl>
 #include <QVariantList>
+#include <QTimer>
 #include <atomic>
 #include <memory>
 
@@ -37,6 +38,7 @@ public:
     void setSearch(const QString &value);
     int count() const { return m_visible.size(); }
     Q_INVOKABLE void refresh();
+    Q_INVOKABLE void requestAccess();
     Q_INVOKABLE void addFolder(const QUrl &url);
     Q_INVOKABLE void removeFolder(const QString &path);
 signals:
@@ -56,4 +58,5 @@ private:
     QVector<int> m_visible;
     QFutureWatcher<QVector<VideoEntry>> m_watcher;
     std::shared_ptr<std::atomic_bool> m_cancel;
+    QTimer m_permissionTimer;
 };

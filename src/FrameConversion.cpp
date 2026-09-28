@@ -78,14 +78,25 @@ QImage convertYuv(const QVideoFrame &input) {
 }
 
 bool configureFrameConversion(const QString &mode) {
-    if (mode != "auto" && mode != "sse" && mode != "scalar" && mode != "qt") return false;
+    if (mode != "auto" && mode != "sse" && mode != "neon" && mode != "scalar" && mode != "qt") return false;
     useQt = mode == "qt";
     int mask = libyuv::kCpuInitialized;
+#if defined(Q_PROCESSOR_ARM)
+    // libyuv reuses bit values across architectures (e.g. SSE2 == NEON).
+    // Build masks and labels per architecture, never OR x86 and ARM together.
+    if (mode == "auto" || mode == "neon") mask |= libyuv::kCpuHasARM | libyuv::kCpuHasNEON;
+    if (mode == "auto") mask |= libyuv::kCpuHasNeonDotProd | libyuv::kCpuHasNeonI8MM;
+#else
     if (mode == "auto" || mode == "sse") mask |= libyuv::kCpuHasX86 | libyuv::kCpuHasSSE2 | libyuv::kCpuHasSSSE3 | libyuv::kCpuHasSSE41 | libyuv::kCpuHasSSE42;
     if (mode == "auto") mask |= libyuv::kCpuHasAVX | libyuv::kCpuHasAVX2;
+#endif
     const int enabled = libyuv::MaskCpuFlags(mask); // intersects real CPUID/OS support
+#if defined(Q_PROCESSOR_ARM)
+    backend = useQt ? "Qt" : (enabled & libyuv::kCpuHasNEON) ? "libyuv NEON" : "libyuv scalar";
+#else
     backend = useQt ? "Qt" : (enabled & libyuv::kCpuHasAVX2) ? "libyuv AVX2"
         : (enabled & libyuv::kCpuHasSSSE3) ? "libyuv SSSE3" : (enabled & libyuv::kCpuHasSSE2) ? "libyuv SSE2" : "libyuv scalar";
+#endif
     return true;
 }
 QString frameConversionBackend() { return backend; }

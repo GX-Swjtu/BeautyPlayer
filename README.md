@@ -2,7 +2,7 @@
 
 基于 Qt 6 Multimedia 和 GPUPixel 的实时美颜播放器。自有代码采用 **MIT**，支持修改、分发和商业使用；第三方组件保留各自许可。
 
-**当前可用平台：Windows x64。** 界面已适配手机宽度及触控操作；尚未交付 Android APK，不能把 Windows 窄屏预览当作安卓真机验证。详见 [Android 边界](docs/ANDROID.md)。
+**Windows x64 和 Android ARM64 已运行验证。** Android 在骁龙 8 Elite / SM8750、Android 16 真机上确认使用高通 MediaCodec 硬解码、libyuv NEON 和 Adreno 830 GPU 美颜。默认美颜的 1080p30、原尺寸 4K、暂停调参和播放手势已通过测试；其他手机仍需验证。详见 [Android 构建与安装](docs/ANDROID.md) 和 [真机记录](docs/ANDROID-VALIDATION.md)。
 
 ## 功能
 
@@ -13,6 +13,7 @@
 - **长按画面临时 3× 播放**，松开恢复原速；可在播放设置中改为 1.5–5×。
 - **左右滑动快进/快退**，显示目标位置，松开才跳转；双击播放/暂停，单击显示/隐藏控制栏。
 - Windows 视频库自动扫描“视频”和“下载”，支持添加/移除目录、子文件夹分组、搜索和刷新。启动先显示缓存，后台重新扫描；不读取视频内容或生成缩略图。
+- Android 视频库查询系统 MediaStore 索引，支持按目录分组、搜索和部分视频授权；也可用系统文件选择器打开。
 
 默认美颜第一次升级到 v0.2 时应用一次，以后保留用户修改。关闭“美颜”总开关即可观看原图。全部五官/美妆关闭时跳过检测；开启时处理检测器返回的第一张脸。
 
@@ -37,15 +38,17 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\package.ps1
 
 ## 操作
 
+Android ARM64 构建：`.\scripts\build-android.ps1`；输出 `dist/android-arm64/BeautyPlayer-arm64-v8a.apk`。手机连接 USB 调试后运行 `.\scripts\test-android.ps1` 安装启动，`-SelfTest` 可执行手机端颜色、NEON、GL 和模型检查。详见 [Android 文档](docs/ANDROID.md)。
+
 视频库右上角“文件”打开视频，“⋮”中添加目录、播放网址或调整设置。播放界面左下角“美颜”打开可收起的底部面板，五官与美妆各有独立开关。
 
 键盘：空格播放/暂停，左右键 ±10 秒，Ctrl+O 打开文件，F11 全屏，Esc 关闭面板或退出全屏。扫描和播放记录仅存本机，不上传媒体或历史。移除扫描目录不会删除文件；缓存不会自动监听文件变动，点“刷新”更新。
 
 ## 性能与范围
 
-Qt FFmpeg 自动选择可用硬件解码器，本机日志确认使用 D3D11VA；美颜由 OpenGL GPU 执行。帧转换和 GPU 处理分别在两个工作线程运行，队列固定上限，过载时丢弃尚未处理的旧输入。原图模式直接传递 QVideoFrame，省去 RGBA 转换和 GPUPixel 上传/回读。输出图像缓冲区可安全复用。
+Qt FFmpeg 自动选择可用硬件解码器：Windows 已确认 D3D11VA，Android 真机已确认高通 `c2.qti.avc.decoder`；美颜由 OpenGL/OpenGL ES GPU 执行。帧转换和 GPU 处理分别在两个工作线程运行，队列固定上限，过载时丢弃尚未处理的旧输入。Windows 原图模式直接传递 QVideoFrame；Android 原图仍在同一转换线程取帧，避免 SurfaceTexture 上下文争用，再跳过 GPUPixel。输出图像缓冲区可安全复用。
 
-v0.2.1 使用 libyuv 加速常见 NV12/NV21/YUV420P/YV12 到 RGBA 的转换，运行时按 CPU 和操作系统能力选择 **AVX2 → SSSE3/SSE2 → 标量**，保留双线性色度插值、原分辨率和 BT.601/709 全/限范围。色彩信息不明确、HDR 或复杂 surface 变换继续交给 Qt。未对整个程序强制开启 AVX2；当前验证的是 Windows x64，Android ARM 尚未验证。
+libyuv 加速常见 NV12/NV21/YUV420P/YV12 到 RGBA 的转换，Windows 运行时选择 **AVX2 → SSSE3/SSE2 → 标量**，Android ARM64 选择 **NEON**，保留双线性色度插值、原分辨率和 BT.601/709 全/限范围。色彩信息不明确、HDR 或复杂 surface 变换继续交给 Qt。未对整个程序强制开启特定高端指令；硬解纹理由 Qt GPU 转换，人脸检测副本使用 libyuv 缩图。
 
 保留原始像素尺寸。美颜路径仍有 CPU/GPU 数据传输，并非全程零拷贝；实际帧率取决于视频、GPU 和开启的特效。支持范围为 8 位 SDR、单人脸实时播放，不包含导出、HDR 保真或摄像头。实测数据与限制见 [v0.2 验证记录](docs/VALIDATION-v0.2.md)。
 

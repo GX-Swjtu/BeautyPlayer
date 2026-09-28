@@ -1,0 +1,59 @@
+{
+  "qt": "6.11.2",
+  "abi": "arm64-v8a",
+  "gpupixel": "v1.3.1",
+  "gpupixelCommit": "5a1b34ea74cf131088ee4f29946a16c667a83e26",
+  "sdkRepository": "https://dl.google.com/android/repository/repository2-3.xml",
+  "files": [
+    {
+      "archive": "third_party/android/gpupixel-source-v1.3.1.zip",
+      "url": "https://codeload.github.com/pixpark/gpupixel/zip/5a1b34ea74cf131088ee4f29946a16c667a83e26",
+      "sha256": "B1B82FAF5282A663B95260E6B189537D0B8FD359DC24F37BCE985B813A98EFFA",
+      "prefix": "gpupixel-5a1b34ea74cf131088ee4f29946a16c667a83e26/",
+      "destination": "third_party/android/gpupixel-5a1b34ea74cf131088ee4f29946a16c667a83e26",
+      "marker": "CMakeLists.txt"
+    },
+    {
+      "archive": "third_party/libyuv-source.zip",
+      "url": "https://codeload.github.com/lemenkov/libyuv/zip/7320155784bdfefb69db8edddca37ecacf7e5198",
+      "sha256": "B129A71A41AD6EEBF658CAE43685A56D3B3D89C7C9088B37F5F1C6ADCF45E5CC",
+      "prefix": "libyuv-7320155784bdfefb69db8edddca37ecacf7e5198/",
+      "destination": "third_party/libyuv", "marker": "CMakeLists.txt"
+    },
+    {
+      "archive": "third_party/android/jdk21.zip",
+      "url": "https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.12.1%2B1/OpenJDK21U-jdk_x64_windows_hotspot_21.0.12.1_1.zip",
+      "sha256": "F9D6E191AB098C0D416E7D588A24420A8621CD2F4720DAB2459B8B7B2D2D8B4E",
+      "prefix": "jdk-21.0.12.1+1/",
+      "destination": "third_party/android/java/jdk-21.0.12.1+1", "marker": "bin/java.exe"
+    },
+    {
+      "archive": "third_party/android/platform-tools_r37.0.1-win.zip",
+      "url": "https://dl.google.com/android/repository/platform-tools_r37.0.1-win.zip",
+      "sha256": "45F4D63113E895EBDE0C90F194099A4676B6AC653BD28D54314A9E022BBC1A99",
+      "prefix": "platform-tools/",
+      "destination": "third_party/android/toolchain/sdk/platform-tools", "marker": "adb.exe"
+    },
+    {
+      "archive": "third_party/android/platform-36_r02.zip",
+      "url": "https://dl.google.com/android/repository/platform-36_r02.zip",
+      "sha256": "37607369A28C5B640B3A7998868D45898EBCB777565A0E85F9ACF36F29631D2E",
+      "prefix": "android-36/",
+      "destination": "third_party/android/toolchain/sdk/platforms/android-36", "marker": "android.jar"
+    },
+    {
+      "archive": "third_party/android/build-tools_r36_windows.zip",
+      "url": "https://dl.google.com/android/repository/build-tools_r36_windows.zip",
+      "sha256": "AA1095CB14D83E483818A748A2C06FAAEB8E601561B06A356A119A1B2CA280D3",
+      "prefix": "android-16/",
+      "destination": "third_party/android/toolchain/sdk/build-tools/36.0.0", "marker": "aapt2.exe"
+    },
+    {
+      "archive": "third_party/android/android-ndk-r27c-windows.zip",
+      "url": "https://dl.google.com/android/repository/android-ndk-r27c-windows.zip",
+      "sha256": "27E49F11E0CEE5800983D8AF8F4ACD5BF09987AA6F790D4439DDA9F3643D2494",
+      "prefix": "android-ndk-r27c/",
+      "destination": "third_party/android/toolchain/sdk/ndk/27.2.12479018", "marker": "build/cmake/android.toolchain.cmake"
+    }
+  ]
+}

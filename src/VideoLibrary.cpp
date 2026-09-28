@@ -1,4 +1,6 @@
 #include "VideoLibrary.h"
+#include "PlatformServices.h"
+#include <QGuiApplication>
 #include <QtConcurrent/QtConcurrentRun>
 #include <QDirIterator>
 #include <QElapsedTimer>
@@ -28,7 +30,21 @@ VideoLibrary::VideoLibrary(bool persistent, QObject *parent) : QAbstractListMode
         emit statusChanged();
         if (std::exchange(m_refreshAgain, false)) refresh();
     });
+#ifdef Q_OS_ANDROID
+    m_roots = {QStringLiteral("Android MediaStore")};
+    // Re-query after permission changes in system settings, including Android
+    // 14's selected-videos access. Do not persist inaccessible cached results.
+    connect(qGuiApp, &QGuiApplication::applicationStateChanged, this, [this](Qt::ApplicationState state) {
+        if (state == Qt::ApplicationActive && m_persistent) refresh();
+    });
+    m_permissionTimer.setInterval(500);
+    connect(&m_permissionTimer, &QTimer::timeout, this, [this] {
+        if (!PlatformServices::videoAccessPending()) { m_permissionTimer.stop(); refresh(); }
+    });
+    if (persistent) QTimer::singleShot(200, this, &VideoLibrary::requestAccess);
+#else
     if (persistent) QTimer::singleShot(200, this, &VideoLibrary::refresh);
+#endif
 }
 VideoLibrary::~VideoLibrary() {
     if (m_cancel) m_cancel->store(true);
@@ -77,6 +93,13 @@ void VideoLibrary::addFolder(const QUrl &url) {
     m_roots.append(path); saveRoots(); refresh();
 }
 void VideoLibrary::removeFolder(const QString &path) { m_roots.removeAll(path); saveRoots(); setFolder({}); refresh(); }
+void VideoLibrary::requestAccess() {
+#ifdef Q_OS_ANDROID
+    PlatformServices::requestVideoAccess();
+    m_permissionTimer.start();
+#endif
+    refresh();
+}
 void VideoLibrary::refresh() {
     if (scanning()) { m_refreshAgain = true; m_cancel->store(true); return; }
     if (m_cancel) m_cancel->store(true); // Invalidate queued status from the previous scan.
@@ -85,6 +108,17 @@ void VideoLibrary::refresh() {
     m_status = QStringLiteral("正在查找视频…");
     m_watcher.setFuture(QtConcurrent::run([this, roots, cancel] {
         QElapsedTimer timer; timer.start(); QVector<VideoEntry> entries;
+#ifdef Q_OS_ANDROID
+        const auto result = PlatformServices::scanAndroidVideos();
+        for (const auto &value : result["videos"].toArray()) {
+            if (cancel->load()) break;
+            const auto entry = value.toObject();
+            entries.append({entry["name"].toString(), entry["folder"].toString(), QUrl(entry["url"].toString()), entry["bytes"].toInteger(), entry["modified"].toInteger()});
+        }
+        const auto message = result.contains("error") ? result["error"].toString()
+            : QStringLiteral("%1 个视频 · %2 ms%3").arg(entries.size()).arg(timer.elapsed())
+                .arg(result["limited"].toBool() ? QStringLiteral(" · 仅获授权的视频") : QString());
+#else
         const QSet<QString> extensions{"mp4", "mkv", "mov", "avi", "webm", "m4v", "ts", "mts", "m2ts", "wmv", "flv", "mpg", "mpeg", "3gp"};
         QSet<QString> seen; int missing = 0;
         for (const auto &root : roots) {
@@ -112,12 +146,18 @@ void VideoLibrary::refresh() {
         const auto message = QStringLiteral("%1 个视频 · %2 ms%3%4").arg(entries.size()).arg(timer.elapsed())
             .arg(missing ? QStringLiteral(" · %1 个目录不可访问").arg(missing) : QString())
             .arg(entries.size() == 100000 ? QStringLiteral(" · 已达 10 万条上限") : QString());
+#endif
         QMetaObject::invokeMethod(this, [this, cancel, message] { if (!cancel->load()) { m_status = message; emit statusChanged(); } }, Qt::QueuedConnection);
         return entries;
     }));
     emit statusChanged();
 }
 void VideoLibrary::cache(bool write) {
+#ifdef Q_OS_ANDROID
+    // MediaStore is already an OS-maintained index; stale JSON can reveal names
+    // of media for which the user has subsequently revoked access.
+    Q_UNUSED(write); return;
+#endif
     if (!m_persistent) return;
     const auto dir = QStandardPaths::writableLocation(QStandardPaths::CacheLocation); QDir().mkpath(dir);
     const auto path = dir + "/videos-v1.json";

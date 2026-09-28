@@ -64,12 +64,17 @@ int maxDifference(const QImage &a, const QImage &b) {
         diff = std::max(diff, std::abs(int(a.constScanLine(y)[x]) - int(b.constScanLine(y)[x])));
     return diff;
 }
-int main(int argc, char **argv) {
-    QCoreApplication app(argc, argv);
-    if (app.arguments().contains("--benchmark")) {
+int runFrameConversionTests(const QStringList &arguments) {
+    failures = 0; checks = 0;
+#ifdef Q_PROCESSOR_ARM
+    constexpr auto baselineSimd = "neon";
+#else
+    constexpr auto baselineSimd = "sse";
+#endif
+    if (arguments.contains("--benchmark")) {
         for (const QSize size : {QSize(1920, 1080), QSize(2160, 3840)}) {
             auto frame = fixture(size, F::Format_NV12, F::ColorSpace_BT709, F::ColorRange_Video);
-            for (const auto mode : {"scalar", "sse", "auto"}) {
+            for (const auto mode : {"scalar", baselineSimd, "auto"}) {
                 configureFrameConversion(mode);
                 for (int i = 0; i < 5; ++i) normalizedFrameImage(frame);
                 QElapsedTimer timer; timer.start();
@@ -88,7 +93,15 @@ int main(int argc, char **argv) {
         auto expected = image.transformed(QTransform().rotate(rotation));
         if (mirror) expected = expected.flipped(Qt::Horizontal);
         bool fast = true;
-        check(normalizedFrameImage(frame, &fast) == expected && !fast, "RGBA fallback transforms");
+        const auto actual = normalizedFrameImage(frame, &fast);
+        // Qt's GLES fallback rounds normalized texture samples to 8-bit, which
+        // differs by at most one channel value on Adreno. Check every pixel,
+        // including rotated/mirrored edges; CPU conversion remains exact below.
+#ifdef Q_OS_ANDROID
+        check(maxDifference(actual, expected) <= 1 && !fast, "RGBA GLES fallback transforms within 1/255");
+#else
+        check(actual == expected && !fast, "RGBA fallback transforms");
+#endif
     }
     int worst = 0;
     for (auto size : {QSize(2,2), QSize(3,3), QSize(17,9), QSize(321,239), QSize(640,360)})
@@ -100,7 +113,7 @@ int main(int argc, char **argv) {
         bool fast = false;
         const auto reference = normalizedFrameImage(frame, &fast);
         check(fast && reference.size() == size, "mapped YUV dimensions / padded strides");
-        for (auto mode : {"sse", "auto"}) {
+        for (auto mode : {baselineSimd, "auto"}) {
             configureFrameConversion(mode);
             const auto result = normalizedFrameImage(frame, &fast);
             const int diff = maxDifference(reference, result); worst = std::max(worst, diff);
@@ -150,3 +163,9 @@ int main(int argc, char **argv) {
     std::cout << checks << " checks, " << failures << " failures; scalar/SIMD max channel difference=" << worst << std::endl;
     return failures ? 1 : 0;
 }
+#ifndef BEAUTY_EMBEDDED_TESTS
+int main(int argc, char **argv) {
+    QCoreApplication app(argc, argv);
+    return runFrameConversionTests(app.arguments());
+}
+#endif

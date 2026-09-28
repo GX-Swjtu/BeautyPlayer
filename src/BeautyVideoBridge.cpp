@@ -1,9 +1,56 @@
 #include "BeautyVideoBridge.h"
 #include "GPUPixelPipeline.h"
 #include "FrameConversion.h"
+#include "PlatformServices.h"
 #include <QCoreApplication>
 #include <exception>
 #include <utility>
+#ifdef Q_OS_ANDROID
+#include <QOffscreenSurface>
+#include <rhi/qrhi.h>
+#endif
+
+class VideoConversionWorker : public QObject {
+public:
+    explicit VideoConversionWorker(QObject *surfaceOwner) {
+#ifdef Q_OS_ANDROID
+        // QOffscreenSurface creation/destruction belongs to the GUI thread.
+        // The worker owns only QRhi and the staging sink, which die before it.
+        surface = QRhiGles2InitParams::newFallbackSurface(); surface->setParent(surfaceOwner);
+#else
+        Q_UNUSED(surfaceOwner);
+#endif
+    }
+    ~VideoConversionWorker() override {
+#ifdef Q_OS_ANDROID
+        if (sink) { sink->setVideoFrame({}); sink->setRhi(nullptr); sink.reset(); }
+        rhi.reset();
+#endif
+    }
+    QImage convert(const QVideoFrame &frame, bool *usedYuv) {
+#ifdef Q_OS_ANDROID
+        if (frame.pixelFormat() == QVideoFrameFormat::Format_SamplerExternalOES) {
+            if (!rhi) {
+                QRhiGles2InitParams params; params.fallbackSurface = surface;
+                rhi.reset(QRhi::create(QRhi::OpenGLES2, &params));
+                if (!rhi) return {};
+                sink = std::make_unique<QVideoSink>(); sink->setRhi(rhi.get());
+            }
+            // Qt 6.11 requires the MediaCodec texture converter to be registered
+            // on this exact QRhi before QVideoFrame::toImage(). A bare input
+            // QVideoSink cannot read an external OES frame on a worker thread.
+            sink->setVideoFrame(frame);
+        }
+#endif
+        return normalizedFrameImage(frame, usedYuv);
+    }
+private:
+#ifdef Q_OS_ANDROID
+    QOffscreenSurface *surface = nullptr;
+    std::unique_ptr<QRhi> rhi;
+    std::unique_ptr<QVideoSink> sink;
+#endif
+};
 
 class BeautyWorker : public QObject {
 public:
@@ -11,12 +58,13 @@ public:
     QString error;
     void initialize() {
         pipeline = std::make_unique<GPUPixelPipeline>();
-        pipeline->initialize(QCoreApplication::applicationDirPath(), &error);
+        const auto root = PlatformServices::beautyResourceRoot(&error);
+        if (error.isEmpty()) pipeline->initialize(root, &error);
     }
 };
 
 BeautyVideoBridge::BeautyVideoBridge(QMediaPlayer *player, BeautySettings *settings, QObject *parent)
-    : QObject(parent), m_player(player), m_settings(settings), m_converter(new QObject), m_worker(new BeautyWorker) {
+    : QObject(parent), m_player(player), m_settings(settings), m_converter(new VideoConversionWorker(this)), m_worker(new BeautyWorker) {
     m_player->setVideoSink(&m_input);
     m_worker->moveToThread(&m_thread); m_converter->moveToThread(&m_conversionThread);
     connect(&m_thread, &QThread::finished, m_worker, &QObject::deleteLater);
@@ -43,7 +91,7 @@ BeautyVideoBridge::BeautyVideoBridge(QMediaPlayer *player, BeautySettings *setti
     }, Qt::QueuedConnection);
     m_clock.start(); m_statsTimer.setInterval(1000);
     connect(&m_statsTimer, &QTimer::timeout, this, [this] {
-        const auto count = m_processed - m_bypassed;
+        const auto count = m_timedFrames;
         m_statistics = QStringLiteral("%1 × %2 · 转换 %3 ms · 美颜 %4 ms · 丢帧 %5")
             .arg(m_size.width()).arg(m_size.height())
             .arg(count ? m_conversionMs / count : 0, 0, 'f', 1)
@@ -54,6 +102,7 @@ BeautyVideoBridge::BeautyVideoBridge(QMediaPlayer *player, BeautySettings *setti
 }
 BeautyVideoBridge::~BeautyVideoBridge() {
     m_player->setVideoSink(nullptr);
+    if (m_mediaDevice) m_player->setSource({});
     m_conversionThread.quit(); m_conversionThread.wait();
     m_thread.quit(); m_thread.wait();
 }
@@ -71,8 +120,17 @@ void BeautyVideoBridge::invalidate() {
 }
 void BeautyVideoBridge::open(const QUrl &url) {
     if (!url.isValid() || url.isEmpty()) return;
+    PlatformServices::prepareMedia(url);
+    QString openError;
+    auto device = PlatformServices::openMediaDevice(url, &openError);
+    if (!openError.isEmpty()) { emit mediaOpenFailed(openError); return; }
     emit aboutToOpen();
-    m_player->stop(); invalidate(); m_player->setSource(url); emit sourceOpened(); m_player->play();
+    m_player->stop(); invalidate();
+    if (m_mediaDevice) m_player->setSource({});
+    m_mediaDevice = std::move(device);
+    if (m_mediaDevice) m_player->setSourceDevice(m_mediaDevice.get(), url);
+    else m_player->setSource(url);
+    emit sourceOpened(); m_player->play();
 }
 void BeautyVideoBridge::seek(qint64 position) {
     if (!m_player->isSeekable()) return;
@@ -94,12 +152,18 @@ void BeautyVideoBridge::acceptFrame(const QVideoFrame &frame) {
         .arg(QVideoFrameFormat::pixelFormatToString(format.pixelFormat()))
         .arg(int(format.colorSpace())).arg(int(format.colorRange())).arg(int(format.colorTransfer()));
     ++m_received;
-    if (frame.handleType() == QVideoFrame::RhiTextureHandle) ++m_hardwareFrames;
+    if (frame.handleType() == QVideoFrame::RhiTextureHandle || frame.pixelFormat() == QVideoFrameFormat::Format_SamplerExternalOES) ++m_hardwareFrames;
     if (m_pending.isValid()) ++m_dropped;
     m_lastFrame = frame; m_pending = frame; dispatch();
 }
 void BeautyVideoBridge::dispatch() {
-    const auto parameters = m_settings->snapshot();
+    auto parameters = m_settings->snapshot();
+#ifdef Q_OS_ANDROID
+    // A MediaCodec SurfaceTexture must stay attached to one conversion context.
+    // Original comparison still uses that worker, bypassing only GPUPixel, so
+    // Qt's display thread never steals the decoder's external OES texture.
+    if (m_compare || !m_ready) parameters.values.fill(0.f);
+#else
     if ((!parameters.active() || m_compare || !m_ready) && m_pending.isValid()) {
         // Preserve native textures, rotation and timing in original mode.
         auto frame = std::exchange(m_pending, {}); m_prepared.reset();
@@ -110,20 +174,25 @@ void BeautyVideoBridge::dispatch() {
         emit framePresented(frame.startTime(), false, 0);
         return;
     }
+#endif
     if (!m_busy && m_prepared) {
         auto job = std::move(*m_prepared); m_prepared.reset(); m_busy = true;
         QMetaObject::invokeMethod(m_worker, [this, job = std::move(job)]() mutable {
             BeautyResult result; QString error;
             QElapsedTimer timer; timer.start();
-            try { result = m_worker->pipeline->process(job.image, job.parameters); }
+            try {
+                result = job.parameters.active() ? m_worker->pipeline->process(job.image, job.parameters)
+                    : BeautyResult{job.image, false, 0};
+            }
             catch (const std::exception &e) { error = QString::fromUtf8(e.what()); result.image = job.image; }
             const auto gpuMs = timer.nsecsElapsed() / 1000000.0;
-            QMetaObject::invokeMethod(this, [this, result = std::move(result), job = std::move(job), error, gpuMs] {
+            QMetaObject::invokeMethod(this, [this, result = std::move(result), job = std::move(job), error, gpuMs]() mutable {
                 m_busy = false;
                 if (job.epoch != m_epoch || job.revision != m_revision) { ++m_stale; dispatch(); return; }
                 if (!result.image.isNull()) {
                     const double ms = job.conversionMs + gpuMs;
-                    ++m_processed; m_totalMs += ms; m_conversionMs += job.conversionMs; m_gpuMs += gpuMs;
+                    ++m_processed; ++m_timedFrames; m_totalMs += ms; m_conversionMs += job.conversionMs; m_gpuMs += gpuMs;
+                    if (!job.parameters.active()) ++m_bypassed;
                     m_maxMs = std::max(m_maxMs, ms); if (result.faceFound) ++m_faceFrames;
                     m_lastImage = result.image; m_originalPresented = {}; m_size = result.image.size();
                     m_lastPts = job.frame.startTime();
@@ -131,9 +200,11 @@ void BeautyVideoBridge::dispatch() {
                     if (m_output) m_output->setVideoFrame(output);
                     emit framePresented(m_lastPts, result.faceFound, ms);
                 }
+                if (!job.parameters.active() && !m_ready && error.isEmpty()) error = m_error;
                 m_error = error;
                 if (!error.isEmpty()) { m_ready = false; m_prepared.reset(); }
                 const QString next = !error.isEmpty() ? QStringLiteral("美颜不可用：%1 · 原图播放").arg(error)
+                    : !job.parameters.active() ? QStringLiteral("原图")
                     : result.faceFound ? QStringLiteral("五官与美妆已开启")
                     : job.parameters.needsFace() ? QStringLiteral("未发现人脸 · 基础美颜继续") : QStringLiteral("轻盈美颜已开启");
                 if (m_status != next) { m_status = next; emit statusChanged(); }
@@ -149,7 +220,7 @@ void BeautyVideoBridge::dispatch() {
     QMetaObject::invokeMethod(m_converter, [this, frame, parameters, epoch, revision] {
         QElapsedTimer timer; timer.start();
         bool usedYuv = false;
-        auto image = normalizedFrameImage(frame, &usedYuv);
+        auto image = m_converter->convert(frame, &usedYuv);
         const auto ms = timer.nsecsElapsed() / 1000000.0;
         QMetaObject::invokeMethod(this, [this, image = std::move(image), frame, parameters, epoch, revision, ms, usedYuv]() mutable {
             m_converting = false;
@@ -162,7 +233,7 @@ void BeautyVideoBridge::dispatch() {
     }, Qt::QueuedConnection);
 }
 QJsonObject BeautyVideoBridge::metrics() const {
-    const auto count = m_processed - m_bypassed;
+    const auto count = m_timedFrames;
     return {{"ready", m_ready}, {"error", m_error}, {"renderer", m_renderer}, {"received", m_received},
         {"converter", frameConversionBackend()}, {"yuvConversions", m_yuvConversions},
         {"qtConversions", m_qtConversions}, {"inputFormat", m_inputFormat},

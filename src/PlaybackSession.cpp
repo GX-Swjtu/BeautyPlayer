@@ -1,5 +1,6 @@
 #include "PlaybackSession.h"
 #include "BeautyVideoBridge.h"
+#include "PlatformServices.h"
 #include <QGuiApplication>
 #include <QStandardPaths>
 #include <QSettings>
@@ -26,10 +27,16 @@ PlaybackSession::PlaybackSession(QMediaPlayer *player, BeautyVideoBridge *bridge
         }
     });
     connect(player, &QMediaPlayer::playbackStateChanged, this, [this](QMediaPlayer::PlaybackState state) {
+        PlatformServices::keepScreenOn(state == QMediaPlayer::PlayingState);
         if (state != QMediaPlayer::PlayingState) { endHold(); save(); }
     });
     connect(qGuiApp, &QGuiApplication::applicationStateChanged, this, [this](Qt::ApplicationState state) {
         if (state != Qt::ApplicationActive) { endHold(); save(); }
+#ifdef Q_OS_ANDROID
+        // Release decoder pressure and stop audio while backgrounded. Resume
+        // remains a user action, including after screen locking or a call.
+        if (state == Qt::ApplicationSuspended || state == Qt::ApplicationHidden) m_player->pause();
+#endif
     });
     connect(qGuiApp, &QCoreApplication::aboutToQuit, this, &PlaybackSession::save);
     m_saveTimer.setInterval(5000); connect(&m_saveTimer, &QTimer::timeout, this, &PlaybackSession::save); m_saveTimer.start();
@@ -44,6 +51,11 @@ void PlaybackSession::save() {
 }
 void PlaybackSession::restore() {
     if (m_opening || !m_restorePending || !m_player->isSeekable() || m_player->duration() <= 0) return;
+    // A replacement QIODevice loads asynchronously while the previous source's
+    // duration/seekable values may still be visible. Do not consume the bookmark
+    // until Qt confirms that the new media is loaded.
+    if (m_player->mediaStatus() != QMediaPlayer::LoadedMedia
+        && m_player->mediaStatus() != QMediaPlayer::BufferedMedia) return;
     m_restorePending = false;
     if (m_resumePosition >= m_player->duration()) return;
     m_bridge->seek(m_resumePosition);
@@ -52,7 +64,7 @@ void PlaybackSession::restore() {
 }
 QString PlaybackSession::title() const {
     const auto url = m_player->source();
-    return url.isEmpty() ? QStringLiteral("映颜") : url.fileName().isEmpty() ? url.host() : url.fileName();
+    return url.isEmpty() ? QStringLiteral("映颜") : PlatformServices::mediaTitle(url);
 }
 void PlaybackSession::setHoldSpeed(double value) {
     if (!std::isfinite(value)) return;

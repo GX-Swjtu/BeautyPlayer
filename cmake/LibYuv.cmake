@@ -1,3 +1,19 @@
+if(ANDROID)
+    set(LIBYUV_DISABLE_JPEG ON CACHE BOOL "" FORCE)
+    set(UNIT_TEST OFF CACHE BOOL "" FORCE)
+    # r27c's Clang accepts the upstream probe but lacks the full SME ZA ABI.
+    # ARM64 NEON / dot-product / i8mm remain enabled with runtime dispatch.
+    set(CAN_COMPILE_SME OFF CACHE INTERNAL "NDK r27c has no complete SME ABI" FORCE)
+    add_subdirectory(third_party/libyuv EXCLUDE_FROM_ALL)
+    foreach(part yuv_common_objects yuv_neon64 yuv_sve yuv_sme)
+        if(TARGET ${part})
+            target_compile_definitions(${part} PRIVATE LIBYUV_UNLIMITED_DATA)
+        endif()
+    endforeach()
+    target_include_directories(yuv INTERFACE "${CMAKE_SOURCE_DIR}/third_party/libyuv/include")
+    add_library(beauty_yuv ALIAS yuv)
+    return()
+endif()
 # clang-cl exposes libyuv's complete SSSE3/AVX2 bilinear conversion kernels.
 # The application and Qt continue to use MSVC. No global /arch:AVX2 is used.
 include(ExternalProject)

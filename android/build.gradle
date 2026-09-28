@@ -1,0 +1,47 @@
+// Based on Qt 6.11's Android application template (Qt example BSD-3-Clause).
+buildscript {
+    repositories { google(); mavenCentral() }
+    dependencies { classpath 'com.android.tools.build:gradle:9.0.0' }
+}
+repositories { google(); mavenCentral() }
+apply plugin: qtGradlePluginType
+dependencies {
+    implementation fileTree(dir: 'libs', include: ['*.jar', '*.aar'])
+    implementation 'androidx.core:core:1.17.0'
+}
+android {
+    namespace = androidPackageName
+    compileSdkVersion androidCompileSdkVersion
+    buildToolsVersion androidBuildToolsVersion
+    ndkVersion = androidNdkVersion
+    sourceSets {
+        main {
+            manifest.srcFile 'AndroidManifest.xml'
+            java.srcDirs = [qtAndroidDir + '/src', 'src', 'java']
+            res.srcDirs = [qtAndroidDir + '/res', 'res']
+            aidl.srcDirs = [qtAndroidDir + '/src', 'src', 'aidl']
+            assets.srcDirs = ['assets']
+            jniLibs.srcDirs = ['libs']
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    tasks.withType(JavaCompile) { options.compilerArgs += ['-Xlint:all'] }
+    androidResources { noCompress += ['rcc'] }
+    packaging {
+        jniLibs {
+            useLegacyPackaging = false
+            // Qt rewrites this library's dynamic imports. NDK r27 llvm-strip
+            // then changes a PT_LOAD offset without changing its virtual
+            // address, producing an invalid ELF. Keep the verified Qt file.
+            keepDebugSymbols += ['**/libavformat.so']
+        }
+    }
+    defaultConfig {
+        minSdkVersion qtMinSdkVersion
+        targetSdkVersion qtTargetSdkVersion
+        ndk.abiFilters = qtTargetAbiList.split(',')
+    }
+}

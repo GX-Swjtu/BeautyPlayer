@@ -27,12 +27,20 @@ The unmodified official Windows release includes `mars-face-kit.dll`, face detec
 The repository's MIT license covers neither an independent redistribution grant for that closed component nor its models. `scripts/setup.ps1` retrieves the original upstream SDK for local building. No SDK or portable binaries are uploaded by this source publication; a public binary release requires checking the upstream component's redistribution terms separately.
 Exact download hashes are recorded in `dependencies.lock.json`.
 
+Android v0.3.0 uses GPUPixel v1.3.1, commit `5a1b34ea74cf131088ee4f29946a16c667a83e26`, with the source, models, resources and ARM64 Mars library from that same commit. The Android EGL context and Qt pipeline adapter are provided in this repository. Windows continues to use beta3; its headers and libraries are not mixed with the Android SDK. Android download hashes are in `android-dependencies.lock.json`. The same closed-component redistribution boundary applies to Android.
+
 ## libyuv
 
 Pinned source commit `7320155784bdfefb69db8edddca37ecacf7e5198` from https://chromium.googlesource.com/libyuv/libyuv .
 The archive is fetched from the same commit in the https://github.com/lemenkov/libyuv mirror, with SHA256 in `dependencies.lock.json`.
 Statically linked, BSD-3-Clause; notices in `licenses/libyuv-LICENSE.txt`, `licenses/libyuv-PATENTS.txt` and `licenses/libyuv-AUTHORS.txt`.
 Built with clang-cl, JPEG disabled, and `LIBYUV_UNLIMITED_DATA` for more accurate YUV coefficients. Upstream source is unmodified. CPU/OS feature detection selects the applicable scalar, SSE or AVX2 kernels; no application-wide AVX2 requirement is introduced.
+
+Android builds libyuv with NDK r27c Clang and ARM64 NEON kernels, using HWCAP feature detection for NEON, dot-product and i8mm. SME is disabled because this NDK lacks the complete SME ZA ABI. GPUPixel includes stb_image (public domain/MIT choice; license in the pinned source header). Android dynamically links Qt 6.11.2 and its FFmpeg libraries. License texts are embedded as Qt resources and also shipped beside the locally built APK. Qt Android application/Gradle template adaptations retain Qt's BSD-3-Clause notice.
+
+## Android Java support
+
+AndroidX Core 1.17.0 and its AndroidX dependencies are used by the Qt Android template; AndroidX is licensed under Apache-2.0. The license copied from the official Core AAR is in `licenses/AndroidX-Apache-2.0.txt`. The runtime also includes Kotlin standard library 2.2.10 and JetBrains annotations 23.0.0, licensed under Apache-2.0. Sources: https://android.googlesource.com/platform/frameworks/support/ ; https://github.com/JetBrains/kotlin ; https://github.com/JetBrains/java-annotations . Build-time Gradle, AGP, JDK and Android SDK tools are downloaded separately and are not bundled as application runtime code.
 
 ## OpenGL support
 

@@ -13,12 +13,28 @@
 #include "VideoLibrary.h"
 #include "FrameConversion.h"
 #include <cstdio>
+#ifdef Q_OS_ANDROID
+int runAndroidSelfTest(const QString &prefix);
+#endif
 
 int main(int argc, char **argv) {
+#ifdef Q_OS_ANDROID
+    // Qt 6.11 otherwise calls process-wide exit() after main returns. Android's
+    // HWUI workers can still be running then, and abort on destroyed libc++
+    // mutexes. Let Qt finish the Activity and Android own process reclamation;
+    // our player, worker threads and EGL contexts still destruct normally.
+    qputenv("QT_ANDROID_NO_EXIT_CALL", "1");
+    // Keep Qt's FFmpeg backend: it selects Android MediaCodec for supported
+    // streams, with software fallback. Do not force a Qualcomm-only codec name.
+    qputenv("QT_MEDIA_BACKEND", "ffmpeg");
+    if (!qEnvironmentVariableIsSet("QT_FFMPEG_DECODING_HW_DEVICE_TYPES"))
+        qputenv("QT_FFMPEG_DECODING_HW_DEVICE_TYPES", "mediacodec");
+    QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL);
+#endif
     QGuiApplication app(argc, argv);
     QCoreApplication::setOrganizationName("BeautyPlayer");
     QCoreApplication::setApplicationName("BeautyPlayer");
-    QCoreApplication::setApplicationVersion("0.2.1");
+    QCoreApplication::setApplicationVersion("0.3.0");
     QQuickStyle::setStyle("Material");
     QCommandLineParser parser; parser.addHelpOption(); parser.addVersionOption();
     parser.addPositionalArgument("video", "Local video or HTTP(S) URL");
@@ -29,14 +45,25 @@ int main(int argc, char **argv) {
     parser.addOption({"hidden", "Hide window during long diagnostics"});
     parser.addOption({"profile", "Probe beauty profile: default, all, original", "profile", "all"});
     parser.addOption({"phone", "Preview the responsive phone layout (390 x 844)"});
+#ifdef Q_OS_ANDROID
+    parser.addOption({"self-test", "Run ARM64 color/NEON/GLES checks and save JSON", "report-prefix"});
+#endif
     parser.addOption({"library-folder", "Add a folder to the video library", "folder"});
-    parser.addOption({"converter", "Frame conversion: auto (AVX2/SSE fallback), sse, scalar, qt", "mode", "auto"});
+    parser.addOption({"converter", "Frame conversion: auto (AVX2/NEON), sse, neon, scalar, qt", "mode", "auto"});
     parser.process(app);
     if (!configureFrameConversion(parser.value("converter"))) parser.showHelp(2);
+#ifdef Q_OS_ANDROID
+    if (parser.isSet("self-test")) {
+        QTimer::singleShot(500, &app, [&] { runAndroidSelfTest(parser.value("self-test")); });
+        return app.exec(); // adb collects the report before stopping the test process.
+    }
+#endif
+#ifndef Q_OS_ANDROID
     if (parser.isSet("probe")) qInstallMessageHandler([](QtMsgType type, const QMessageLogContext &context, const QString &message) {
         const auto line = qFormatLogMessage(type, context, message).toUtf8();
         std::fprintf(stderr, "%s\n", line.constData()); std::fflush(stderr);
     });
+#endif
     QMediaPlayer player; QAudioOutput audio; audio.setVolume(.65f); player.setAudioOutput(&audio);
     BeautySettings settings(!parser.isSet("fresh") && !parser.isSet("probe"));
     BeautyVideoBridge bridge(&player, &settings);

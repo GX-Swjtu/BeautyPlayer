@@ -20,6 +20,9 @@
 #endif
 
 namespace {
+void saveImageAsync(QImage image, QString path) {
+    QThreadPool::globalInstance()->start([image = std::move(image), path = std::move(path)] { image.save(path); });
+}
 QQuickItem *findVisualItem(QQuickItem *root, const QString &name) {
     if (root->objectName() == name) return root;
     for (auto *child : root->childItems()) if (auto *found = findVisualItem(child, name)) return found;
@@ -77,6 +80,13 @@ void PlaybackProbe::tick() {
         metrics["workingSetMB"] = memory.WorkingSetSize / 1048576.0;
     }
 #endif
+#ifdef Q_OS_ANDROID
+    QFile status("/proc/self/status");
+    if (status.open(QIODevice::ReadOnly)) {
+        for (const auto &line : status.readAll().split('\n'))
+            if (line.startsWith("VmRSS:")) metrics["workingSetMB"] = line.simplified().split(' ').value(1).toDouble() / 1024.;
+    }
+#endif
     m_samples.append(metrics);
     m_previousCount = count; m_previousElapsed = elapsed;
     if (m_tick % 30 == 0) {
@@ -90,14 +100,17 @@ void PlaybackProbe::tick() {
         auto image = m_bridge->lastImage();
         auto path = m_report + "-frame.png";
         QThreadPool::globalInstance()->start([image, path] { image.save(path); });
-        if (m_window->isVisible()) check("window_capture", m_window->grabWindow().save(m_report + "-window.png"));
+        if (m_window->isVisible()) {
+            auto capture = m_window->grabWindow(); check("window_capture", !capture.isNull());
+            saveImageAsync(capture, m_report + "-window.png");
+        }
     }
     if (m_exercise) {
         switch (m_tick) {
         case 3: m_player->pause(); break;
-        case 4: m_before = m_bridge->lastImage(); m_before.save(m_report + "-paused-before.png"); m_settings->setValue("whitening", 1); break;
-        case 5: check("paused_parameter_refresh", !m_before.isNull() && m_before != m_bridge->lastImage()); m_bridge->lastImage().save(m_report + "-paused-after.png"); m_bridge->setCompareOriginal(true); break;
-        case 6: m_compare = m_bridge->lastImage(); m_compare.save(m_report + "-original.png"); m_bridge->setCompareOriginal(false); break;
+        case 4: m_before = m_bridge->lastImage(); saveImageAsync(m_before, m_report + "-paused-before.png"); m_settings->setValue("whitening", 1); break;
+        case 5: check("paused_parameter_refresh", !m_before.isNull() && m_before != m_bridge->lastImage()); saveImageAsync(m_bridge->lastImage(), m_report + "-paused-after.png"); m_bridge->setCompareOriginal(true); break;
+        case 6: m_compare = m_bridge->lastImage(); saveImageAsync(m_compare, m_report + "-original.png"); m_bridge->setCompareOriginal(false); break;
         case 7: check("compare_restores_beauty", m_compare != m_bridge->lastImage()); for (int i = 0; i < BeautyParameters::Count; ++i) m_settings->setValue(BeautySettings::key(i), 0); break;
         case 8: check("reset_matches_original", !m_compare.isNull() && m_compare == m_bridge->lastImage()); applyEffects(); m_player->play(); break;
         case 10: m_bridge->seek(m_player->duration() / 2); break;
@@ -151,7 +164,7 @@ void PlaybackProbe::tick() {
                 QMouseEvent release(QEvent::MouseButtonRelease, point, global, Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
                 QCoreApplication::sendEvent(m_window, &release);
                 check("release_restores_speed", !m_session->holding() && std::abs(m_player->playbackRate() - speed) < .01);
-                m_window->grabWindow().save(m_report + "-phone-player.png");
+                saveImageAsync(m_window->grabWindow(), m_report + "-phone-player.png");
             });
             break;
         }
@@ -178,13 +191,17 @@ void PlaybackProbe::tick() {
             });
             break;
         case 29:
+#ifndef Q_OS_ANDROID
+            // This probe uses app-private fixtures. MediaStore and permission
+            // flows are validated separately, without indexing private media.
             if (m_window->isVisible() && !m_library->roots().isEmpty()) {
                 check("library_scan_found_videos", m_library->count() > 0 && !m_library->scanning());
                 m_window->setProperty("libraryOpen", true);
             }
+#endif
             break;
         case 30:
-            if (m_window->isVisible()) m_window->grabWindow().save(m_report + "-phone-library.png");
+            if (m_window->isVisible()) saveImageAsync(m_window->grabWindow(), m_report + "-phone-library.png");
             break;
         default:
             if (m_tick > 30 && m_tick % 45 == 0) m_bridge->seek(m_player->duration() / 3);

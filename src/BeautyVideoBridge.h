@@ -9,8 +9,11 @@
 #include <QVideoFrame>
 #include <QImage>
 #include <optional>
+#include <QFile>
+#include <memory>
 
 class BeautyWorker;
+class VideoConversionWorker;
 class BeautyVideoBridge : public QObject {
     Q_OBJECT
     Q_PROPERTY(QVideoSink* outputSink READ outputSink WRITE setOutputSink NOTIFY outputSinkChanged)
@@ -34,6 +37,7 @@ public:
 signals:
     void aboutToOpen();
     void sourceOpened();
+    void mediaOpenFailed(const QString &message);
     void outputSinkChanged();
     void statusChanged();
     void statisticsChanged();
@@ -45,12 +49,13 @@ private:
     void dispatch();
     void reprocess();
     QMediaPlayer *m_player;
+    std::unique_ptr<QFile> m_mediaDevice;
     BeautySettings *m_settings;
     QVideoSink m_input;
     QPointer<QVideoSink> m_output;
     QThread m_thread;
     QThread m_conversionThread;
-    QObject *m_converter;
+    VideoConversionWorker *m_converter;
     BeautyWorker *m_worker;
     struct Prepared {
         QImage image;
@@ -69,7 +74,7 @@ private:
     qint64 m_received = 0, m_processed = 0, m_dropped = 0, m_stale = 0, m_faceFrames = 0, m_lastPts = -1;
     double m_totalMs = 0, m_maxMs = 0;
     double m_conversionMs = 0, m_gpuMs = 0;
-    qint64 m_bypassed = 0, m_hardwareFrames = 0;
+    qint64 m_bypassed = 0, m_hardwareFrames = 0, m_timedFrames = 0;
     qint64 m_yuvConversions = 0, m_qtConversions = 0;
     QString m_inputFormat;
     QSize m_size;
