@@ -1,8 +1,10 @@
-# Android ARM64 版（v0.4.1）
+# Android ARM64 版（v0.4.4）
 
 已提供 APK 构建、安装和真机诊断脚本。最低 Android 9 / API 28，目标 API 36，CPU 为 **arm64-v8a**，GPU 需 OpenGL ES 3。适用于骁龙 8 Elite（8E）及满足条件的其他 ARM64 手机。没有限定高通机型或强制新指令；libyuv 按 CPU 实际能力分发。
 
 **已在 24129PN74C / SM8750（骁龙 8 Elite）、Android 16 真机安装运行。** v0.3 的日志确认高通硬解与 Adreno 830 GPU 美颜，591 项转换检查和播放交互检查通过；详见 [Android 初版测试记录](ANDROID-VALIDATION.md)。v0.4 已复测新视频库、缓存、授权目录及 39 项播放交互，见 [v0.4 验证记录](VALIDATION-v0.4.md)。设备使用 4 KB 内存页；16 KB 目前只完成静态 ELF/APK 对齐检查。未测其他手机，也没有功耗仪实测。
+
+**本版 AV1 后端修复尚未真机复测。** v0.4.4 本轮按要求仅交付 APK；编译、签名、包内补丁一致性和 ELF 检查不等于手机播放验收。Windows 的编码实测及本版边界见 [v0.4.4 验证记录](VALIDATION-v0.4.4.md)。
 
 ## 安装与操作
 
@@ -18,6 +20,7 @@
 - 视频库支持带预览图的单列或双列显示，按文件名、创建时间、文件大小升降序排列；布局与排序会保存。预览图优先使用系统代表帧，无图或纯黑/白时尝试视频约 10% 处，缓存可跨启动复用，30 天未使用自动清理。
 - “⋮ → 视频库设置”可开关 `.nomedia` 过滤。关闭后，要通过“添加扫描文件夹”授权对应目录才能补充系统索引忽略的视频。不申请所有文件访问权限；Android 不允许授权的目录仍不可扫描。添加/移除目录不改动其中的视频。
 - 拒绝扫描权限仍可点“文件”，通过系统选择器打开。支持时保留 URI 读取授权；文件已删除、授权撤销或临时 URI 可能无法续播。
+- 文件选择器也支持 Opus/Ogg 等音频，纯音频显示音符占位并禁用美颜入口；视频库不扫描音乐文件。
 - MediaStore 和系统选择器的 `content://` 地址由 ContentResolver 检查权限并打开只读文件描述符，再交给 QMediaPlayer；播放器保留原 URI 用于标题与续播，换片时关闭旧描述符。
 - 默认磨皮 20、美白 20、冷暖 0、色调 0；瘦脸、大眼、口红、腮红默认关闭。冷暖和色调作用于全画面。v0.4.1 已修复上游美白在零附近不连续的问题；v0.4.3 将推荐磨皮从 70 降至 20。
 - “⋮ → 屏蔽文件夹”隐藏选中目录及子目录的视频，可以恢复，不删除文件。返回视频库立即暂停；重新进入画面后由用户继续播放。
@@ -26,7 +29,7 @@
 
 ## 加速实现与边界
 
-1. **解码：Qt FFmpeg + Android MediaCodec。** 默认优先 MediaCodec，不硬编码高通 codec 名称，不强行接受不支持的配置。Qt/FFmpeg 保留软件回退；MediaCodec 也可能选软件组件，必须从真机日志确认实际解码器。
+1. **解码：Qt FFmpeg + Android MediaCodec。** 默认优先 MediaCodec，不硬编码高通 codec 名称，不强行接受不支持的配置。v0.4.4 补齐 Qt 6.11.2 后端遗漏的 AV1 (`video/av01`) 能力映射。Opus 使用已有 FFmpeg CPU 解码器。软件回退取决于打包的解码器；本包未包含 libdav1d/libaom，因此不保证无 AV1 硬解设备可播放 AV1。MediaCodec 也可能选软件组件，必须从真机日志确认实际解码器。
 2. **转换：GPU 纹理路径和 NEON 路径分别处理。** MediaCodec Surface 输出通过转换线程自己的 Qt QRhi/OpenGL ES 上下文取帧。有明确色彩元数据的 NV12/NV21/I420/YV12 CPU 帧用 libyuv NEON 转 RGBA；人脸副本缩图也用 NEON。不能把“已编译 NEON”解释为每个硬解纹理帧都执行 NEON。
 3. **美颜：GPUPixel v1.3.1 + OpenGL ES 3。** 头文件、源码、Mars 库和模型来自同一提交；Windows 保持 beta3。GL 在唯一的 BeautyGL 线程执行。输入纹理复用，glTexSubImage2D 上传，省掉上游 RawDataSource 一次中间绘制。
 4. **流水线：** 转换、美颜、显示分工，队列有界，只保留最新候选帧。跳转、换片、调参的旧结果丢弃；输出缓冲池保留独立寿命。人脸检测在主动开启五官/美妆时才创建，副本最长边 640；单帧检测模式避免跨跳转继承跟踪状态。
@@ -49,6 +52,8 @@ Android 启用 Qt 的 `QT_ANDROID_NO_EXIT_CALL`，保留对象、线程和 Activ
 
 脚本校验固定的 JDK 21、Android platform 36、build-tools 36、NDK r27c、GPUPixel、libyuv，版本和 SHA256 在 android-dependencies.lock.json。SDK、JDK、Gradle 缓存与临时目录都在项目内，不修改机器级环境。Java 代理读取当前 HTTPS_PROXY，保留 TLS 验证。
 
+AV1 补丁还使用锁定的 Qt Multimedia 6.11.2 源码和 FFmpeg 7.1.5 头文件，生成独立的 LGPL FFmpeg 插件；只替换 codec-storage 对象，其余实现链接同版本 Qt kit 的静态实现库。安装的 Qt kit 不改动。Gradle 在合并原生库前放入补丁插件，APK 审计逐字节校验其 SHA256；升级 Qt 版本必须重新审查补丁，构建不会静默继续。
+
 每次打包将旧目录保存在 artifacts/android/package-backups，防止遗留 Qt 插件进入新包。原生库按 16 KB 链接，APK 使用未压缩、对齐的库。Qt 调整过的 libavformat.so 被 r27 二次 strip 后出现段偏移错误，因此 Gradle 对该库保留原文件，并检查 APK 内的实际 ELF。
 
 ## 真机验收
@@ -62,6 +67,10 @@ Android 启用 Qt 的 `QT_ANDROID_NO_EXIT_CALL`，保留对象、线程和 Activ
 .\scripts\test-android.ps1 -Video .\test-media\face-1080.mp4 -Seconds 600
 # 软件解码对照
 .\scripts\test-android.ps1 -Video .\test-media\face-1080.mp4 -SoftwareDecode
+# 生成编码测试片后分别验证 AV1 画面和 Opus 音频（AV1 不用 -SoftwareDecode）
+.\scripts\prepare-codec-media.ps1
+.\scripts\test-android.ps1 -Video .\test-media\codecs\av1-opus.webm -Seconds 15
+.\scripts\test-android.ps1 -Video .\test-media\codecs\audio.opus -Seconds 15
 # 仅针对文件名匹配 BeautyPlayer- 的测试视频检查列表与缩略图
 .\scripts\test-android.ps1 -Library -ThumbnailCacheName library-check
 # 再执行一次同一命令，报告应显示 diskHits 增加、generated 为 0

@@ -96,8 +96,9 @@ void PlaybackSession::togglePlayback() {
 void PlaybackSession::pauseForLibrary() {
     endHold(); m_player->pause(); save();
 }
-QUrl PlaybackSession::firstDroppedVideo(const QList<QUrl> &urls) const {
-    static const QSet<QString> extensions{"mp4", "mkv", "mov", "avi", "webm", "m4v", "ts", "mts", "m2ts", "wmv", "flv", "mpg", "mpeg", "3gp"};
+QUrl PlaybackSession::firstDroppedMedia(const QList<QUrl> &urls) const {
+    static const QSet<QString> extensions{"mp4", "mkv", "mov", "avi", "webm", "m4v", "ts", "mts", "m2ts", "wmv", "flv", "mpg", "mpeg", "3gp",
+        "opus", "ogg", "oga", "mp3", "m4a", "aac", "flac", "wav"};
     for (const auto &url : urls) {
         const QFileInfo file(url.toLocalFile());
         if (url.isLocalFile() && file.isFile() && extensions.contains(file.suffix().toLower())) return url;

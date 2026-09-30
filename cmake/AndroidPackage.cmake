@@ -3,12 +3,13 @@ set_target_properties(BeautyPlayer PROPERTIES
     QT_QML_ROOT_PATH "${CMAKE_SOURCE_DIR}/qml"
     QT_ANDROID_MIN_SDK_VERSION 28 QT_ANDROID_TARGET_SDK_VERSION 36
     QT_ANDROID_SDK_BUILD_TOOLS_REVISION "36.0.0"
-    QT_ANDROID_VERSION_NAME "${PROJECT_VERSION}" QT_ANDROID_VERSION_CODE 403
+    QT_ANDROID_VERSION_NAME "${PROJECT_VERSION}" QT_ANDROID_VERSION_CODE 404
     QT_ANDROID_APP_NAME "映颜播放器" QT_ANDROID_PACKAGE_NAME "org.beautyplayer.app"
     QT_ANDROID_EXTRA_LIBS "${MARS_LIBRARY}")
 target_link_options(BeautyPlayer PRIVATE -Wl,-z,max-page-size=16384 -Wl,--gc-sections)
 find_package(Qt6 REQUIRED COMPONENTS GuiPrivate)
 target_link_libraries(BeautyPlayer PRIVATE Qt6::GuiPrivate)
+include("${CMAKE_CURRENT_LIST_DIR}/AndroidMediaPlugin.cmake")
 target_sources(BeautyPlayer PRIVATE src/android/AndroidSelfTest.cpp tests/FrameConversionTests.cpp)
 target_compile_definitions(BeautyPlayer PRIVATE BEAUTY_EMBEDDED_TESTS)
 qt_import_plugins(BeautyPlayer EXCLUDE_BY_TYPE qmltooling platforminputcontexts vectorimageformats)

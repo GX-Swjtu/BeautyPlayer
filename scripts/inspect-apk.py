@@ -20,6 +20,11 @@ with zipfile.ZipFile(apk) as archive:
     check('no_unused_gpl_modules', not any(any(part in entry.filename.lower() for part in
           ('virtualkeyboard', 'lottie', 'quick3d', 'qmldbg')) for entry in libraries))
     names = {pathlib.PurePosixPath(entry.filename).name for entry in libraries}
+    if len(sys.argv) > 3:
+        patched = pathlib.Path(sys.argv[3])
+        deployed = 'lib/arm64-v8a/' + patched.name
+        check('patched_av1_plugin_packaged', deployed in archive.namelist() and
+              hashlib.sha256(archive.read(deployed)).digest() == hashlib.sha256(patched.read_bytes()).digest())
     for required in ('libBeautyPlayer_arm64-v8a.so', 'libmars-face-kit.so', 'libc++_shared.so',
                      'libQt6Multimedia_arm64-v8a.so', 'libplugins_multimedia_ffmpegmediaplugin_arm64-v8a.so'):
         check('bundled_' + required, required in names)

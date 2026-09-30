@@ -36,7 +36,9 @@ android {
             // Qt rewrites this library's dynamic imports. NDK r27 llvm-strip
             // then changes a PT_LOAD offset without changing its virtual
             // address, producing an invalid ELF. Keep the verified Qt file.
-            keepDebugSymbols += ['**/libavformat.so']
+            // The patched plugin is already stripped by CMake. Preserve its
+            // bytes so the delivery audit can verify the exact built binary.
+            keepDebugSymbols += ['**/libavformat.so', '**/libplugins_multimedia_ffmpegmediaplugin_arm64-v8a.so']
         }
     }
     defaultConfig {
@@ -45,3 +47,19 @@ android {
         ndk.abiFilters = qtTargetAbiList.split(',')
     }
 }
+
+// androiddeployqt stages the stock Qt plugin before invoking Gradle. Replace it
+// before native library merging, without changing the installed Qt SDK.
+def beautyMediaPlugin = file('../qt-media-patch/libplugins_multimedia_ffmpegmediaplugin_arm64-v8a.so')
+def stagedMediaPlugin = file('libs/arm64-v8a/' + beautyMediaPlugin.name)
+tasks.register('stageBeautyMediaPlugin') {
+    inputs.file(beautyMediaPlugin)
+    outputs.file(stagedMediaPlugin)
+    doLast {
+        copy {
+            from beautyMediaPlugin
+            into stagedMediaPlugin.parentFile
+        }
+    }
+}
+tasks.named('preBuild').configure { dependsOn 'stageBeautyMediaPlugin' }

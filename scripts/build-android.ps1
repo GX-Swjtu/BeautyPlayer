@@ -57,12 +57,17 @@ $deployment = Get-Content "$build/android-BeautyPlayer-deployment-settings.json"
 $deployment.'qml-root-path' = @((Join-Path $root 'qml').Replace('\', '/'))
 $deploymentPath = Join-Path $build 'android-BeautyPlayer-scoped-deployment-settings.json'
 $deployment | ConvertTo-Json -Depth 20 | Set-Content $deploymentPath -Encoding utf8
+$pluginName = 'libplugins_multimedia_ffmpegmediaplugin_arm64-v8a.so'
+$fixedPlugin = Join-Path $build "qt-media-patch/$pluginName"
+if (!(Test-Path -LiteralPath $fixedPlugin)) { throw 'The patched FFmpeg plugin is missing.' }
+# android/build.gradle replaces the staged Qt plugin before native libraries are
+# merged. Keep Qt's normal deployment so its wrapper and generated settings exist.
 & "$QtHost/bin/androiddeployqt.exe" --input $deploymentPath --output "$build/android-build" --android-platform android-36 --jdk $env:JAVA_HOME --gradle
 if ($LASTEXITCODE) { throw 'Android APK packaging failed' }
 $apk = Join-Path $build 'android-build/build/outputs/apk/debug/android-build-debug.apk'
 if (!(Test-Path $apk)) { throw "APK not found: $apk" }
 $python = (Get-Command python.exe -ErrorAction Stop).Source
-& $python (Join-Path $PSScriptRoot 'inspect-apk.py') $apk (Join-Path $root 'artifacts/android/apk-inspection.json')
+& $python (Join-Path $PSScriptRoot 'inspect-apk.py') $apk (Join-Path $root 'artifacts/android/apk-inspection.json') $fixedPlugin
 if ($LASTEXITCODE) { throw 'APK dependency/ELF validation failed; package not delivered.' }
 & (Join-Path $env:ANDROID_SDK_ROOT 'build-tools/36.0.0/apksigner.bat') verify --verbose $apk
 if ($LASTEXITCODE) { throw 'APK signature verification failed' }
@@ -71,9 +76,8 @@ if ($LASTEXITCODE) { throw 'APK alignment verification failed' }
 $dist = Join-Path $root 'dist/android-arm64'; New-Item -ItemType Directory -Force $dist | Out-Null
 Copy-Item -LiteralPath $apk -Destination (Join-Path $dist 'BeautyPlayer-arm64-v8a.apk') -Force
 Copy-Item -LiteralPath (Join-Path $root 'docs/ANDROID.md') -Destination (Join-Path $dist 'README.md') -Force
-if (Test-Path (Join-Path $root 'docs/ANDROID-VALIDATION.md')) {
-    Copy-Item -LiteralPath (Join-Path $root 'docs/ANDROID-VALIDATION.md') -Destination $dist -Force
-}
+Get-ChildItem -LiteralPath (Join-Path $root 'docs') -Filter '*VALIDATION*.md' -File |
+    Copy-Item -Destination $dist -Force
 foreach ($name in @('LICENSE', 'THIRD_PARTY_NOTICES.md', 'android-dependencies.lock.json')) {
     Copy-Item -LiteralPath (Join-Path $root $name) -Destination $dist -Force
 }

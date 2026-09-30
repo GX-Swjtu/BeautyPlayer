@@ -6,6 +6,20 @@
   "sdkRepository": "https://dl.google.com/android/repository/repository2-3.xml",
   "files": [
     {
+      "archive": "third_party/qt-multimedia-6.11.2.zip",
+      "url": "https://codeload.github.com/qt/qtmultimedia/zip/refs/tags/v6.11.2",
+      "sha256": "2E2E93A46222D7953C210258DE9572764CAE982E0D2AC703328B15AE0CF66576",
+      "prefix": "qtmultimedia-6.11.2/",
+      "destination": "third_party/qtmultimedia-6.11.2", "marker": "src/plugins/multimedia/ffmpeg/qffmpegcodecstorage.cpp"
+    },
+    {
+      "archive": "third_party/ffmpeg-n7.1.5.zip",
+      "url": "https://codeload.github.com/FFmpeg/FFmpeg/zip/refs/tags/n7.1.5",
+      "sha256": "4F1B727EE006A07210CA010ABB04E67A034C9D361A3A4A1E51D5A2657E0FE7A4",
+      "prefix": "FFmpeg-n7.1.5/",
+      "destination": "third_party/FFmpeg-n7.1.5", "marker": "libavcodec/avcodec.h"
+    },
+    {
       "archive": "third_party/android/gpupixel-source-v1.3.1.zip",
       "url": "https://codeload.github.com/pixpark/gpupixel/zip/5a1b34ea74cf131088ee4f29946a16c667a83e26",
       "sha256": "B1B82FAF5282A663B95260E6B189537D0B8FD359DC24F37BCE985B813A98EFFA",

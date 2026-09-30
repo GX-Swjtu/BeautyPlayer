@@ -35,15 +35,17 @@ else {
     if (!$source) {
         $videoFile = (Resolve-Path -LiteralPath $Video).Path
         Invoke-Adb push $videoFile '/data/local/tmp/beautyplayer-validation.mp4'
-        Invoke-Adb shell run-as $package cp '/data/local/tmp/beautyplayer-validation.mp4' "$remote/input.mp4"
+        $extension = [IO.Path]::GetExtension($videoFile).ToLowerInvariant()
+        if ($extension -notmatch '^\.[a-z0-9]{1,8}$') { $extension = '.bin' }
+        Invoke-Adb shell run-as $package cp '/data/local/tmp/beautyplayer-validation.mp4' "$remote/input$extension"
         Invoke-Adb shell rm '/data/local/tmp/beautyplayer-validation.mp4'
-        $source = "$remote/input.mp4"
+        $source = "$remote/input$extension"
     }
     $arguments = "--fresh --probe $prefix --seconds $Seconds --profile $BeautyProfile $source"
     if ($Exercise) { $arguments += ' --exercise' }
 }
 $extra = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($arguments))
-$environment = "QT_LOGGING_RULES=qt.multimedia.ffmpeg.hwaccel=true"
+$environment = "QT_LOGGING_RULES=qt.multimedia.ffmpeg.hwaccel=true;qt.multimedia.playbackengine.codec=true"
 if ($SoftwareDecode) { $environment += "`tQT_FFMPEG_DECODING_HW_DEVICE_TYPES=," }
 $envEncoded = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($environment))
 Invoke-Adb shell am force-stop $package

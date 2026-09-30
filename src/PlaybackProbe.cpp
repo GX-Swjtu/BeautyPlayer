@@ -8,6 +8,8 @@
 #include <QQuickWindow>
 #include <QAudioBufferOutput>
 #include <QAudioBuffer>
+#include <QMediaMetaData>
+#include <QMediaFormat>
 #include <QJsonDocument>
 #include <QFile>
 #include <QDir>
@@ -42,7 +44,13 @@ PlaybackProbe::PlaybackProbe(QMediaPlayer *p, BeautySettings *s, BeautyVideoBrid
     p->setAudioBufferOutput(audio);
     connect(p, &QMediaPlayer::sourceChanged, this, [this] { m_audioPts = -1; });
     connect(audio, &QAudioBufferOutput::audioBufferReceived, this, [this](const QAudioBuffer &buffer) {
-        if (buffer.isValid()) m_audioPts = buffer.startTime();
+        if (buffer.isValid()) {
+            m_audioPts = buffer.startTime(); ++m_audioBuffers; m_audioFrames += buffer.frameCount();
+            const auto format = buffer.format();
+            for (qsizetype sample = 0; sample < buffer.sampleCount(); sample += 32)
+                m_audioPeak = std::max(m_audioPeak, std::abs(format.normalizedSampleValue(
+                    buffer.constData<char>() + sample * format.bytesPerSample())));
+        }
     });
     p->setLoops(QMediaPlayer::Infinite);
     applyEffects();
@@ -95,6 +103,13 @@ void PlaybackProbe::tick() {
     metrics["second"] = elapsed / 1000.0;
     metrics["fpsInterval"] = (count - m_previousCount) * 1000.0 / std::max(qint64(1), elapsed - m_previousElapsed);
     metrics["positionMs"] = m_player->position();
+    metrics["hasAudio"] = m_player->hasAudio(); metrics["hasVideo"] = m_player->hasVideo();
+    metrics["audioBuffersDecoded"] = m_audioBuffers; metrics["audioFramesDecoded"] = m_audioFrames;
+    metrics["audioPeak"] = m_audioPeak;
+    const auto audioCodec = m_player->metaData().value(QMediaMetaData::AudioCodec);
+    const auto videoCodec = m_player->metaData().value(QMediaMetaData::VideoCodec);
+    metrics["audioCodec"] = audioCodec.isValid() ? QMediaFormat::audioCodecName(audioCodec.value<QMediaFormat::AudioCodec>()) : QString();
+    metrics["videoCodec"] = videoCodec.isValid() ? QMediaFormat::videoCodecName(videoCodec.value<QMediaFormat::VideoCodec>()) : QString();
     const bool hasAudioTime = m_player->hasAudio() && m_audioPts >= 0 && m_bridge->lastPresentedPts() >= 0;
     const double rawDifference = (m_audioPts - m_bridge->lastPresentedPts()) / 1000.0;
     metrics["rawAudioMinusVideoPtsMs"] = hasAudioTime ? QJsonValue(rawDifference) : QJsonValue();
@@ -365,7 +380,16 @@ void PlaybackProbe::tick() {
         check("engine_ready", metrics["ready"].toBool());
         check("no_beauty_error", metrics["error"].toString().isEmpty());
         check("no_player_error", m_player->error() == QMediaPlayer::NoError);
-        check("frames_presented", count > 10);
+        if (m_player->hasVideo()) check("frames_presented", count > 10);
+        else check("audio_frames_received", m_audioFrames > 0);
+        if (!m_player->audioTracks().isEmpty()) check("audio_decoded", m_audioFrames > 0);
+        if (m_player->hasAudio() && !m_player->hasVideo()) {
+            auto *placeholder = findVisualItem(m_window->contentItem(), "audioPlaceholder");
+            check("audio_placeholder_visible", placeholder && placeholder->isVisible());
+#ifdef Q_OS_WIN
+            check("audio_drop_supported", m_session->firstDroppedMedia({m_player->source()}) == m_player->source());
+#endif
+        }
         if (m_window->isVisible()) m_window->grabWindow().save(m_report + "-final-window.png");
         QFile out(m_report + ".json");
         if (!out.open(QIODevice::WriteOnly)) { QCoreApplication::exit(2); return; }

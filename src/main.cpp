@@ -39,7 +39,7 @@ int main(int argc, char **argv) {
     QGuiApplication app(argc, argv);
     QCoreApplication::setOrganizationName("BeautyPlayer");
     QCoreApplication::setApplicationName("BeautyPlayer");
-    QCoreApplication::setApplicationVersion("0.4.3");
+    QCoreApplication::setApplicationVersion("0.4.4");
     QGuiApplication::setWindowIcon(QIcon(":/branding/mark.png"));
     QQuickStyle::setStyle("Material");
 #ifdef Q_OS_ANDROID

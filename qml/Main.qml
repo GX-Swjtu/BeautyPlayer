@@ -61,6 +61,10 @@ ApplicationWindow {
         target: player
         function onErrorOccurred(error, errorString) { root.errorText = errorString; root.showControls() }
         function onPlaybackStateChanged() { root.showControls() }
+        function onMediaStatusChanged() {
+            if (player.mediaStatus === MediaPlayer.LoadedMedia && player.hasAudio && !player.hasVideo)
+                root.panelOpen = false
+        }
     }
     Connections { target: playbackSession; function onNoticeChanged() { if (playbackSession.notice !== "") { toast.text = playbackSession.notice; toastTimer.restart() } } }
     Shortcut { sequence: "Space"; enabled: !root.libraryOpen && !urlDialog.opened; onActivated: playbackSession.togglePlayback() }
@@ -71,8 +75,8 @@ ApplicationWindow {
     Shortcut { sequence: "Right"; enabled: !root.libraryOpen; onActivated: { bridge.seek(player.position + 10000); root.showControls() } }
 
     FileDialog {
-        id: fileDialog; title: "选择视频"
-        nameFilters: ["视频 (*.mp4 *.mkv *.mov *.avi *.webm *.m4v *.ts *.mts *.m2ts *.wmv *.flv *.mpg *.mpeg *.3gp)", "所有文件 (*)"]
+        id: fileDialog; title: "选择视频或音频"
+        nameFilters: ["视频和音频 (*.mp4 *.mkv *.mov *.avi *.webm *.m4v *.ts *.mts *.m2ts *.wmv *.flv *.mpg *.mpeg *.3gp *.opus *.ogg *.oga *.mp3 *.m4a *.aac *.flac *.wav)", "音频 (*.opus *.ogg *.oga *.mp3 *.m4a *.aac *.flac *.wav)", "所有文件 (*)"]
         onAccepted: bridge.open(selectedFile)
     }
     FolderDialog { id: folderDialog; title: "添加视频文件夹"; onAccepted: videoLibrary.addFolder(selectedFolder) }
@@ -88,6 +92,12 @@ ApplicationWindow {
         // Keep the whole frame visible while tuning, including portrait video.
         anchors.bottomMargin: root.panelOpen && !root.libraryOpen ? beautyPanel.height : 0
         fillMode: VideoOutput.PreserveAspectFit
+    }
+    Column {
+        objectName: "audioPlaceholder"; anchors.centerIn: parent; spacing: 16
+        visible: !root.libraryOpen && player.hasAudio && !player.hasVideo
+        Label { anchors.horizontalCenter: parent.horizontalCenter; text: "♪"; font.pixelSize: 64; color: "#9ce6ce" }
+        Label { anchors.horizontalCenter: parent.horizontalCenter; text: "音频播放"; font.pixelSize: 20; color: "#c1ccc9" }
     }
     MouseArea {
         id: gestures; objectName: "videoGestures"; anchors.fill: parent
@@ -162,7 +172,7 @@ ApplicationWindow {
             }
             RowLayout {
                 spacing: root.compact ? 2 : 16; Layout.fillWidth: true
-                ToolButton { objectName: "beautyEntry"; text: "美颜"; implicitWidth: 60; implicitHeight: 52; onClicked: root.panelOpen = true }
+                ToolButton { objectName: "beautyEntry"; text: "美颜"; enabled: player.hasVideo; implicitWidth: 60; implicitHeight: 52; onClicked: root.panelOpen = true }
                 ToolButton { text: player.playbackRate.toFixed(1) + "×"; implicitWidth: 56; implicitHeight: 52; onClicked: optionsDialog.open() }
                 Item { Layout.fillWidth: true }
                 ToolButton { text: "−10"; implicitWidth: 48; implicitHeight: 52; onClicked: { bridge.seek(player.position - 10000); root.showControls() } }
@@ -203,14 +213,14 @@ ApplicationWindow {
     }
     DropArea {
         id: videoDrop; objectName: "videoDropArea"; anchors.fill: parent; z: 100; enabled: !root.android
-        onEntered: drag => { drag.accepted = drag.hasUrls && playbackSession.firstDroppedVideo(drag.urls).toString() !== "" }
+        onEntered: drag => { drag.accepted = drag.hasUrls && playbackSession.firstDroppedMedia(drag.urls).toString() !== "" }
         onDropped: drop => {
-            const video = playbackSession.firstDroppedVideo(drop.urls)
+            const video = playbackSession.firstDroppedMedia(drop.urls)
             if (video.toString() !== "") { root.panelOpen = false; bridge.open(video); drop.accept(Qt.CopyAction) }
         }
         Rectangle {
             anchors.fill: parent; visible: videoDrop.containsDrag; color: "#bb101c18"; border.color: "#a5ead3"; border.width: 2
-            Label { anchors.centerIn: parent; text: "松开即可播放视频"; font.pixelSize: 24; color: "#c4f7e2" }
+            Label { anchors.centerIn: parent; text: "松开即可播放"; font.pixelSize: 24; color: "#c4f7e2" }
         }
     }
 

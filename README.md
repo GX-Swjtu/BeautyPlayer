@@ -2,17 +2,17 @@
 
 基于 Qt 6 Multimedia 和 GPUPixel 的实时美颜播放器。自有代码采用 **MIT**，支持修改、分发和商业使用；第三方组件保留各自许可。
 
-**Windows x64 和 Android ARM64 已运行验证。** Android 在骁龙 8 Elite / SM8750、Android 16 真机上确认使用高通 MediaCodec 硬解码、libyuv NEON 和 Adreno 830 GPU 美颜。默认美颜的 1080p30、原尺寸 4K、暂停调参和播放手势已通过测试；其他手机仍需验证。详见 [Android 构建与安装](docs/ANDROID.md) 和 [真机记录](docs/ANDROID-VALIDATION.md)。
+**Windows x64 和 Android ARM64 已有运行验证。** Android 既有版本在骁龙 8 Elite / SM8750、Android 16 真机上确认使用高通 MediaCodec 硬解码、libyuv NEON 和 Adreno 830 GPU 美颜。默认美颜的 1080p30、原尺寸 4K、暂停调参和播放手势已通过测试；其他手机仍需验证。**v0.4.4 的 Android AV1 修复已编译打包，尚未真机复测。** 详见 [Android 构建与安装](docs/ANDROID.md)、[既有真机记录](docs/ANDROID-VALIDATION.md) 和 [本版编码验证](docs/VALIDATION-v0.4.4.md)。
 
 ## 功能
 
-- 本地文件和 HTTP(S) 视频直链，音量、倍速、循环、全屏。
+- 本地文件和 HTTP(S) 媒体直链，音量、倍速、循环、全屏。文件选择器也可打开 Opus、Ogg 等音频；纯音频显示音符占位，视频库仍只扫描视频。
 - 默认开启磨皮 20、美白 20，冷暖和色调均为 0。瘦脸、大眼、口红、腮红初始关闭，按需启用；默认不运行人脸检测。v0.4.3 升级时仍为旧推荐磨皮 70 的设置自动改为 20，其他自定义强度保留；“恢复推荐”也使用 20。
 - 暂停调参即时生效；“按住对比”查看原图；“恢复推荐”恢复默认预设。冷暖/色调影响全画面。
 - 紧凑美颜面板：底部横滑选择效果，只显示当前效果的一根调整条。视频完整显示在面板上方，不加暗色遮罩；横屏自动压缩面板高度。
 - 自动记住最近 200 个视频的位置；切换文件、暂停、退出和每 5 秒保存。接近片尾或播完后，下次从头开始。
 - 返回视频库立即暂停并保存位置，再进入播放画面时仍保持暂停。
-- Windows 可拖入视频文件播放；鼠标移到底部显示控制栏，静止约 2.5 秒后自动隐藏。
+- Windows 可拖入视频或音频文件播放；鼠标移到底部显示控制栏，静止约 2.5 秒后自动隐藏。
 - **长按画面临时 3× 播放**，松开恢复原速；可在播放设置中改为 1.5–5×。
 - **左右滑动快进/快退**，显示目标位置，松开才跳转；双击播放/暂停，单击显示/隐藏控制栏。
 - Windows 视频库自动扫描“视频”和“下载”，支持添加/移除目录、子文件夹分组、搜索和刷新。启动先显示索引缓存，后台重新扫描；扫描过程只读取文件元数据。
@@ -62,6 +62,8 @@ v0.3.1 的窗口、手机触控与打包检查见 [紧凑面板验证记录](doc
 
 Qt FFmpeg 自动选择可用硬件解码器：Windows 已确认 D3D11VA，Android 真机已确认高通 `c2.qti.avc.decoder`；美颜由 OpenGL/OpenGL ES GPU 执行。帧转换和 GPU 处理分别在两个工作线程运行，队列固定上限，过载时丢弃尚未处理的旧输入。Windows 原图模式直接传递 QVideoFrame；Android 原图仍在同一转换线程取帧，避免 SurfaceTexture 上下文争用，再跳过 GPUPixel。输出图像缓冲区可安全复用。
 
+v0.4.4 修复 Qt Android 后端漏掉 `video/av01` 的硬件能力映射。Windows 已实测 AV1（含 10 位 SDR）、HEVC、VP9 的 D3D11VA 解码，以及 MP4/MKV/WebM 中的 Opus 音轨和独立 Opus 文件。Opus 使用 FFmpeg CPU 解码，不宣称音频 GPU 硬解。AV1 依赖设备、驱动支持对应配置；当前 Qt 配套 FFmpeg 未包含 libdav1d/libaom AV1 软件回退，无 AV1 硬解的设备不能保证播放。10 位 SDR 测试只证明该素材可解码显示，不代表 HDR 保真。详见 [本版验证记录](docs/VALIDATION-v0.4.4.md)。
+
 libyuv 加速常见 NV12/NV21/YUV420P/YV12 到 RGBA 的转换，Windows 运行时选择 **AVX2 → SSSE3/SSE2 → 标量**，Android ARM64 选择 **NEON**，保留双线性色度插值、原分辨率和 BT.601/709 全/限范围。色彩信息不明确、HDR 或复杂 surface 变换继续交给 Qt。未对整个程序强制开启特定高端指令；硬解纹理由 Qt GPU 转换，人脸检测副本使用 libyuv 缩图。
 
 保留原始像素尺寸。美颜路径仍有 CPU/GPU 数据传输，并非全程零拷贝；实际帧率取决于视频、GPU 和开启的特效。支持范围为 8 位 SDR、单人脸实时播放，不包含导出、HDR 保真或摄像头。实测数据与限制见 [v0.2 验证记录](docs/VALIDATION-v0.2.md)。
@@ -78,6 +80,9 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify.ps1 -LongRun
 # 依次测试默认/全部特效/原图 4K 与音画同步，避免多个播放器争用 GPU
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/benchmark.ps1
+# 生成 AV1/HEVC/VP9 + Opus 测试片并验证实际解码（需支持对应编码的 GPU）
+.\scripts\prepare-codec-media.ps1
+.\scripts\verify-codecs.ps1 -RequireHardware
 ```
 
 单独诊断：
